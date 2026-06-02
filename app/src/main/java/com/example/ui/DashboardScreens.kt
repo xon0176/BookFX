@@ -1,5 +1,15 @@
 package com.example.ui
 
+import android.content.Intent
+import androidx.compose.ui.platform.LocalContext
+import android.graphics.Bitmap
+import android.graphics.Canvas as AndroidCanvas
+import android.graphics.Paint as AndroidPaint
+import android.graphics.RectF as AndroidRectF
+import android.graphics.Typeface as AndroidTypeface
+import android.graphics.Path as AndroidPath
+import java.io.File
+import java.io.FileOutputStream
 import androidx.compose.animation.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -13,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -22,12 +33,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.Trade
@@ -621,6 +634,11 @@ fun JournalScreen(viewModel: TradeViewModel) {
     val trades by viewModel.allTrades.collectAsState()
     val activePortfolio = viewModel.activePortfolio
     var selectedDate by remember { mutableStateOf(Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1) }) }
+    val today = remember { Calendar.getInstance() }
+    val weekdayAndDateStr = remember(selectedDate) {
+        val sdf = SimpleDateFormat("EEEE, MMMM d", Locale.getDefault())
+        sdf.format(selectedDate.time)
+    }
     var selectedTab by remember { mutableStateOf("Calendar") }
     var showLogTradeDialog by remember { mutableStateOf(false) }
     
@@ -739,9 +757,9 @@ fun JournalScreen(viewModel: TradeViewModel) {
         filtered.sortedBy { it.timestamp }.map { it.profit - it.brokerage }
     }
 
-    // Dismiss dialog when trade is successfully added
+    // Dismiss dialog when trade is successfully added or updated
     LaunchedEffect(viewModel.manageMessage) {
-        if (viewModel.manageMessage == "Trade added successfully!") {
+        if (viewModel.manageMessage == "Trade added successfully!" || viewModel.manageMessage == "Trade updated successfully!") {
             showLogTradeDialog = false
             viewModel.manageMessage = null
         }
@@ -751,6 +769,7 @@ fun JournalScreen(viewModel: TradeViewModel) {
         modifier = Modifier
             .fillMaxSize()
             .background(DarkBackground) // Premium Dynamic Theme Background
+            .verticalScroll(rememberScrollState())
             .padding(16.dp)
             .padding(bottom = 80.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -768,7 +787,9 @@ fun JournalScreen(viewModel: TradeViewModel) {
                 modifier = Modifier.clickable { viewModel.currentMainTab = "DASHBOARD" }
             )
             Text("Trading Journal", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-            Icon(Icons.Filled.EmojiEvents, contentDescription = "Trophy", tint = Color(0xFFFBBF24))
+            IconButton(onClick = { viewModel.showCertificateDialog = true }) {
+                Icon(Icons.Filled.EmojiEvents, contentDescription = "Trophy", tint = Color(0xFFFBBF24))
+            }
         }
 
         // Performance Card (Designed to match the screenshot precisely)
@@ -966,12 +987,26 @@ fun JournalScreen(viewModel: TradeViewModel) {
                                     if (dayNumber in 1..daysInMonth) {
                                         val isSelected = selectedDate.get(Calendar.DAY_OF_MONTH) == dayNumber
                                         val hasTradesOnThisDay = daysWithTrades.contains(dayNumber)
+                                        val isToday = today.get(Calendar.YEAR) == selectedDate.get(Calendar.YEAR) &&
+                                                      today.get(Calendar.MONTH) == selectedDate.get(Calendar.MONTH) &&
+                                                      today.get(Calendar.DAY_OF_MONTH) == dayNumber
 
+                                        val cellShape = RoundedCornerShape(10.dp)
                                         Box(
                                             modifier = Modifier
-                                                .size(36.dp)
-                                                .clip(CircleShape)
-                                                .background(if (isSelected) Primary else Color.Transparent)
+                                                .size(38.dp)
+                                                .clip(cellShape)
+                                                .then(
+                                                    if (isSelected) {
+                                                        Modifier.background(Primary)
+                                                    } else if (isToday) {
+                                                        Modifier
+                                                            .background(Primary.copy(alpha = 0.05f))
+                                                            .border(1.5.dp, Primary, cellShape)
+                                                    } else {
+                                                        Modifier
+                                                    }
+                                                )
                                                 .clickable {
                                                     selectedDate = (selectedDate.clone() as Calendar).apply { set(Calendar.DAY_OF_MONTH, dayNumber) }
                                                 },
@@ -982,7 +1017,7 @@ fun JournalScreen(viewModel: TradeViewModel) {
                                                     text = dayNumber.toString(),
                                                     color = if (isSelected) Color.White else TextPrimary,
                                                     fontSize = 14.sp,
-                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                                    fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Medium
                                                 )
                                                 if (hasTradesOnThisDay) {
                                                     Box(
@@ -1006,59 +1041,105 @@ fun JournalScreen(viewModel: TradeViewModel) {
                     }
                 }
 
-                // Selected Day Date Card & Add FAB/Plus Button
-                Text("Selected Day", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                // Selected Day Row Header with beautiful layout
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Selected Day",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = weekdayAndDateStr,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = TextSecondary
+                    )
+                }
 
+                // Unified card holding Date Header, Add Action list/empty state
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                    shape = RoundedCornerShape(16.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, if (isSystemInDarkMode) Color(0xFF374151) else Color(0xFFE2E8F0))
+                    shape = RoundedCornerShape(24.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, if (isSystemInDarkMode) Color(0xFF374151) else Color(0xFFE5E7EB))
                 ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(Icons.Default.CalendarToday, contentDescription = null, tint = Primary)
+                        // Card Header Row: June 1, 2026 & Blue circular button
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val cardDateStr = remember(selectedDate) {
+                                val sdf = SimpleDateFormat("MMMM d, yyyy", Locale.US)
+                                sdf.format(selectedDate.time)
+                            }
                             Text(
-                                text = "${monthName.lowercase().replaceFirstChar { it.uppercase() }} ${selectedDate.get(Calendar.DAY_OF_MONTH)}, ${selectedDate.get(Calendar.YEAR)}",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
+                                text = cardDateStr,
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.ExtraBold,
                                 color = TextPrimary
                             )
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(Primary)
+                                    .clickable {
+                                        viewModel.clearTradeForm()
+                                        showLogTradeDialog = true
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "Log Trade Entry",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(Primary)
-                                .clickable {
-                                    viewModel.manageMessage = null
-                                    showLogTradeDialog = true
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = "Log Trade Entry",
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                }
 
-                // Trades List
-                if (filteredTrades.isEmpty()) {
-                    Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                        Text("No trades logged for this day.", color = TextSecondary, fontSize = 14.sp)
-                    }
-                } else {
-                    LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(filteredTrades) { trade ->
-                            TradeJournalCard(trade = trade, onDelete = { viewModel.handleDeleteTrade(trade) })
+                        // Content inside the card
+                        if (filteredTrades.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 32.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "No trades logged for this day.",
+                                    color = TextSecondary,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        } else {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                filteredTrades.forEach { trade ->
+                                    TradeJournalCard(
+                                        trade = trade,
+                                        onEdit = {
+                                            viewModel.startEditTrade(trade)
+                                            showLogTradeDialog = true
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1105,18 +1186,17 @@ fun JournalScreen(viewModel: TradeViewModel) {
                 val currentYear = selectedDate.get(Calendar.YEAR)
                 val monthRows = (0..11).chunked(3)
                 
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(monthRows.size) { rowIndex ->
-                        val rowMonths = monthRows[rowIndex]
+                    monthRows.forEach { rowMonths ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             rowMonths.forEach { mIdx ->
-                                this@Row.MonthGridCell(
+                                MonthGridCell(
                                     monthIdx = mIdx,
                                     currentYear = currentYear,
                                     trades = trades,
@@ -1153,18 +1233,17 @@ fun JournalScreen(viewModel: TradeViewModel) {
 
                 val yearRows = targetYears.chunked(3)
                 
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(yearRows.size) { rowIndex ->
-                        val rowYears = yearRows[rowIndex]
+                    yearRows.forEach { rowYears ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             rowYears.forEach { yr ->
-                                this@Row.YearGridCell(
+                                YearGridCell(
                                     year = yr,
                                     trades = trades,
                                     baseCapital = baseCapitalByTab,
@@ -1190,6 +1269,57 @@ fun JournalScreen(viewModel: TradeViewModel) {
             }
         }
 
+            // Trading Certificate Popup Dialog Overlay
+            if (viewModel.showCertificateDialog) {
+                val activeCertificateTrades = remember(trades, selectedDate, selectedTab) {
+                    val cal = Calendar.getInstance()
+                    when (selectedTab) {
+                        "Calendar" -> {
+                            val targetYear = selectedDate.get(Calendar.YEAR)
+                            val targetMonth = selectedDate.get(Calendar.MONTH)
+                            trades.filter {
+                                cal.timeInMillis = it.timestamp
+                                cal.get(Calendar.YEAR) == targetYear &&
+                                cal.get(Calendar.MONTH) == targetMonth
+                            }
+                        }
+                        "Monthly" -> {
+                            val targetYear = selectedDate.get(Calendar.YEAR)
+                            trades.filter {
+                                cal.timeInMillis = it.timestamp
+                                cal.get(Calendar.YEAR) == targetYear
+                            }
+                        }
+                        else -> { // "Yearly"
+                            trades
+                        }
+                    }
+                }
+                
+                val netPlVal = activeCertificateTrades.sumOf { it.profit } - activeCertificateTrades.sumOf { it.brokerage }
+                val wins = activeCertificateTrades.filter { it.profit > 0 }.size
+                val total = activeCertificateTrades.size
+                val winRateVal = if (total > 0) (wins.toDouble() / total) * 100.0 else 0.0
+                val roiVal = if (baseCapitalByTab > 0) (netPlVal / baseCapitalByTab) * 100.0 else 0.0
+                val userName = viewModel.currentUser?.name ?: "Kartik"
+                
+                val certPeriodTitle = when (selectedTab) {
+                    "Calendar" -> "MONTH OF ${monthName} ${selectedDate.get(Calendar.YEAR)}"
+                    "Monthly" -> "YEAR ${selectedDate.get(Calendar.YEAR)} PERFORMANCE"
+                    else -> "ALL-TIME PORTFOLIO"
+                }
+
+                TradingCertificateDialog(
+                    userName = userName,
+                    periodTitle = certPeriodTitle,
+                    netPl = netPlVal,
+                    winRate = winRateVal,
+                    roi = roiVal,
+                    tradesCount = total,
+                    onDismiss = { viewModel.showCertificateDialog = false }
+                )
+            }
+
             // Modal Log A Trade Form Dialog
             if (showLogTradeDialog) {
                 Dialog(onDismissRequest = { showLogTradeDialog = false }) {
@@ -1213,24 +1343,38 @@ fun JournalScreen(viewModel: TradeViewModel) {
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = "Log A Trade Transaction",
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    val isEditing = viewModel.editingTradeId != null
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color(0xFFEFF6FF)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isEditing) Icons.Default.Edit else Icons.Default.Add,
+                                            contentDescription = if (isEditing) "Edit Trade Icon" else "Add Trade Icon",
+                                            tint = Color(0xFF2563EB),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = if (isEditing) "Edit Trade" else "Add Trade",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary
+                                    )
+                                }
                                 IconButton(onClick = { showLogTradeDialog = false }) {
                                     Icon(Icons.Default.Close, contentDescription = "Close", tint = TextSecondary)
                                 }
                             }
 
-                            Text(
-                                text = "Saving trade to active portfolio: '${activePortfolio?.name ?: "Default"}' for " +
-                                       "${monthName.lowercase().replaceFirstChar { it.uppercase() }} " +
-                                       "${selectedDate.get(Calendar.DAY_OF_MONTH)}, ${selectedDate.get(Calendar.YEAR)}",
-                                fontSize = 12.sp,
-                                color = TextSecondary
-                            )
+
 
                             // BUY / SELL Segment Toggle
                             Row(
@@ -1267,68 +1411,128 @@ fun JournalScreen(viewModel: TradeViewModel) {
                             // Fields
                             OutlinedTextField(
                                 value = viewModel.tradeSymbol,
-                                onValueChange = { viewModel.tradeSymbol = it },
-                                label = { Text("Trading Pair Symbol (e.g. EURUSD)") },
+                                onValueChange = { viewModel.tradeSymbol = it.uppercase() },
+                                label = { Text("Pair") },
+                                placeholder = { Text("XAUUSD") },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 shape = RoundedCornerShape(12.dp),
+                                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
                                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary)
                             )
 
                             OutlinedTextField(
                                 value = viewModel.tradeEntryPrice,
-                                onValueChange = { viewModel.tradeEntryPrice = it },
-                                label = { Text("Entry Execution Price") },
+                                onValueChange = { newValue ->
+                                    val filtered = newValue.filter { it.isDigit() || it == '.' }
+                                    val firstDotIdx = filtered.indexOf('.')
+                                    viewModel.tradeEntryPrice = if (firstDotIdx != -1) {
+                                        val before = filtered.substring(0, firstDotIdx + 1)
+                                        val after = filtered.substring(firstDotIdx + 1).filter { it.isDigit() }
+                                        before + after
+                                    } else {
+                                        filtered
+                                    }
+                                },
+                                label = { Text("Entry Price") },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 shape = RoundedCornerShape(12.dp),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary)
                             )
 
                             OutlinedTextField(
                                 value = viewModel.tradeExitPrice,
-                                onValueChange = { viewModel.tradeExitPrice = it },
-                                label = { Text("Exit Execution Price") },
+                                onValueChange = { newValue ->
+                                    val filtered = newValue.filter { it.isDigit() || it == '.' }
+                                    val firstDotIdx = filtered.indexOf('.')
+                                    viewModel.tradeExitPrice = if (firstDotIdx != -1) {
+                                        val before = filtered.substring(0, firstDotIdx + 1)
+                                        val after = filtered.substring(firstDotIdx + 1).filter { it.isDigit() }
+                                        before + after
+                                    } else {
+                                        filtered
+                                    }
+                                },
+                                label = { Text("Exit Price") },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 shape = RoundedCornerShape(12.dp),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary)
                             )
 
                             OutlinedTextField(
                                 value = viewModel.tradeSize,
-                                onValueChange = { viewModel.tradeSize = it },
-                                label = { Text("Volume (Lots / Units)") },
+                                onValueChange = { newValue ->
+                                    val filtered = newValue.filter { it.isDigit() || it == '.' }
+                                    val firstDotIdx = filtered.indexOf('.')
+                                    viewModel.tradeSize = if (firstDotIdx != -1) {
+                                        val before = filtered.substring(0, firstDotIdx + 1)
+                                        val after = filtered.substring(firstDotIdx + 1).filter { it.isDigit() }
+                                        before + after
+                                    } else {
+                                        filtered
+                                    }
+                                },
+                                label = { Text("Lots") },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 shape = RoundedCornerShape(12.dp),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary)
                             )
 
                             OutlinedTextField(
                                 value = viewModel.tradeBrokerage,
-                                onValueChange = { viewModel.tradeBrokerage = it },
-                                label = { Text("Brokerage / Fees paid ($)") },
+                                onValueChange = { newValue ->
+                                    val filtered = newValue.filter { it.isDigit() || it == '.' }
+                                    val firstDotIdx = filtered.indexOf('.')
+                                    viewModel.tradeBrokerage = if (firstDotIdx != -1) {
+                                        val before = filtered.substring(0, firstDotIdx + 1)
+                                        val after = filtered.substring(firstDotIdx + 1).filter { it.isDigit() }
+                                        before + after
+                                    } else {
+                                        filtered
+                                    }
+                                },
+                                label = { Text("Brokerage ($)") },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 shape = RoundedCornerShape(12.dp),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary)
                             )
 
                             OutlinedTextField(
                                 value = viewModel.tradeProfit,
-                                onValueChange = { viewModel.tradeProfit = it },
-                                label = { Text("Gross Profit / Loss ($ value)") },
+                                onValueChange = { newValue ->
+                                    val isNeg = newValue.startsWith("-")
+                                    val clean = if (isNeg) newValue.substring(1) else newValue
+                                    val filtered = clean.filter { it.isDigit() || it == '.' }
+                                    val firstDotIdx = filtered.indexOf('.')
+                                    val finalVal = if (firstDotIdx != -1) {
+                                        val before = filtered.substring(0, firstDotIdx + 1)
+                                        val after = filtered.substring(firstDotIdx + 1).filter { it.isDigit() }
+                                        before + after
+                                    } else {
+                                        filtered
+                                    }
+                                    viewModel.tradeProfit = if (isNeg) "-$finalVal" else finalVal
+                                },
+                                label = { Text("Gross P/L ($)") },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 shape = RoundedCornerShape(12.dp),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary)
                             )
 
                             OutlinedTextField(
                                 value = viewModel.tradeNotes,
                                 onValueChange = { viewModel.tradeNotes = it },
-                                label = { Text("Optional Comments / Notes") },
+                                label = { Text("Comments") },
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp),
                                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary),
@@ -1589,7 +1793,7 @@ fun RowScope.YearGridCell(
 
 
 @Composable
-fun TradeJournalCard(trade: Trade, onDelete: () -> Unit) {
+fun TradeJournalCard(trade: Trade, onEdit: () -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     val sdf = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
     val dateStr = remember(trade.timestamp) { sdf.format(Date(trade.timestamp)) }
@@ -1707,12 +1911,12 @@ fun TradeJournalCard(trade: Trade, onDelete: () -> Unit) {
                         horizontalArrangement = Arrangement.End
                     ) {
                         TextButton(
-                            onClick = onDelete,
-                            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFEF4444))
+                            onClick = onEdit,
+                            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF2563EB))
                         ) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete", modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Edit, contentDescription = "Edit Log", modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Delete Log")
+                            Text("Edit Log")
                         }
                     }
                 }
@@ -1721,69 +1925,113 @@ fun TradeJournalCard(trade: Trade, onDelete: () -> Unit) {
     }
 }
 
+data class DrawdownCalculation(
+    val list: List<Double>,
+    val maxDd: Double,
+    val currentDd: Double,
+    val daysUnder: Long
+)
+
+@Composable
+fun PerformanceCard(
+    modifier: Modifier = Modifier,
+    title: String,
+    value: String,
+    iconText: String,
+    badgeColor: Color,
+    iconColor: Color
+) {
+    Card(
+        modifier = modifier.height(115.dp),
+        colors = CardDefaults.cardColors(containerColor = DarkSurface),
+        shape = RoundedCornerShape(16.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF1F3F9))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .background(badgeColor, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = iconText,
+                    color = iconColor,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+            }
+            
+            Column {
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary,
+                    fontSize = 18.sp
+                )
+                Text(
+                    text = title,
+                    color = TextSecondary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
 @Composable
 fun AnalyticsScreen(viewModel: TradeViewModel) {
     val trades by viewModel.allTrades.collectAsState()
-    val baseEquity = viewModel.currentUser?.totalEquity ?: 100.0
-
-    if (trades.isEmpty()) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = 80.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.padding(16.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.PieChart,
-                        contentDescription = null,
-                        tint = TextSecondary,
-                        modifier = Modifier.size(64.dp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Performance Metrics Standby",
-                        color = TextPrimary,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Once you log full completed trades, we compile win rates, equity curves & metrics dynamically here.",
-                        color = TextSecondary,
-                        fontSize = 13.sp,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-                }
-            }
+    val activePortfolio = viewModel.activePortfolio
+    
+    // Filter trades by active portfolio
+    val filteredTrades = remember(trades, activePortfolio) {
+        if (activePortfolio != null) {
+            trades.filter { it.portfolioId == activePortfolio.id }
+        } else {
+            trades
         }
-        return
     }
+    
+    val baseEquity = activePortfolio?.startingEquity ?: 10000.0
 
-    // Process statistics
-    val totalTrades = trades.size
-    val winTrades = trades.filter { it.profit > 0 }
-    val lossTrades = trades.filter { it.profit <= 0 }
+    // States for visual interactivity filters
+    var selectedYear by remember { mutableStateOf(2026) }
+    var weekdayTab by remember { mutableStateOf("Profit") }
+    var historyTab by remember { mutableStateOf("Daily P/L") }
+    var equityPointLimit by remember { mutableStateOf(20) }
+    var drawdownPointLimit by remember { mutableStateOf(20) }
+
+    // Aggregate statistics
+    val totalTrades = filteredTrades.size
+    val winTrades = filteredTrades.filter { it.profit > 0 }
+    val lossTrades = filteredTrades.filter { it.profit <= 0 }
     val winCount = winTrades.size
     val lossCount = lossTrades.size
-    val winRate = (winCount.toFloat() / totalTrades.toFloat()) * 100f
+    val winRate = if (totalTrades > 0) (winCount.toFloat() / totalTrades.toFloat()) * 100f else 0f
     
-    val totalNetPl = trades.sumOf { it.profit - it.brokerage }
+    val totalNetPl = filteredTrades.sumOf { it.profit - it.brokerage }
+    val roi = if (baseEquity > 0.0) (totalNetPl / baseEquity) * 100.0 else 0.0
     
     val totalWinsVal = winTrades.sumOf { it.profit }
     val totalLossesVal = lossTrades.sumOf { -it.profit }
-    val profitFactor = if (totalLossesVal > 0) totalWinsVal / totalLossesVal else totalWinsVal
-    
     val avgWin = if (winCount > 0) totalWinsVal / winCount else 0.0
     val avgLoss = if (lossCount > 0) totalLossesVal / lossCount else 0.0
+    
+    val expectancy = if (totalTrades > 0) {
+        val winProb = winCount.toDouble() / totalTrades
+        val lossProb = lossCount.toDouble() / totalTrades
+        (winProb * avgWin) - (lossProb * avgLoss)
+    } else {
+        0.0
+    }
 
     val scrollState = rememberScrollState()
 
@@ -1794,217 +2042,957 @@ fun AnalyticsScreen(viewModel: TradeViewModel) {
             .padding(bottom = 80.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // High-level summary row
+        // 1. Performance Stats Header Grid
+        Text(
+            text = "Performance Stats",
+            fontWeight = FontWeight.Bold,
+            color = TextPrimary,
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Card(
+            val totalPlText = if (totalNetPl == 0.0) "$0" else (if (totalNetPl > 0) "+$" else "-$") + String.format(Locale.US, "%.0f", Math.abs(totalNetPl))
+            val roiText = (if (roi > 0) "+" else "") + String.format(Locale.US, "%.1f%%", roi)
+            val expectancyText = (if (expectancy >= 0) "+$" else "-$") + String.format(Locale.US, "%.1f", Math.abs(expectancy))
+
+            PerformanceCard(
                 modifier = Modifier.weight(1f),
-                colors = CardDefaults.cardColors(containerColor = DarkSurface)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Win Rate", fontSize = 11.sp, color = TextSecondary)
-                    Text("${String.format("%.1f", winRate)}%", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = if (winRate >= 50f) GreenAccent else RedAccent)
-                }
-            }
-            Card(
+                title = "Total P/L",
+                value = totalPlText,
+                iconText = "$",
+                badgeColor = Color(0xFFE6F4EA),
+                iconColor = Color(0xFF137333)
+            )
+            PerformanceCard(
                 modifier = Modifier.weight(1f),
-                colors = CardDefaults.cardColors(containerColor = DarkSurface)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Profit Factor", fontSize = 11.sp, color = TextSecondary)
-                    Text(String.format("%.2f", profitFactor), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = if (profitFactor >= 1.0) Primary else RedAccent)
-                }
-            }
+                title = "ROI",
+                value = roiText,
+                iconText = "%",
+                badgeColor = Color(0xFFE8F0FE),
+                iconColor = Color(0xFF1A73E8)
+            )
+            PerformanceCard(
+                modifier = Modifier.weight(1f),
+                title = "Expectancy",
+                value = expectancyText,
+                iconText = "~",
+                badgeColor = Color(0xFFF1F3F4),
+                iconColor = Color(0xFF5F6368)
+            )
         }
 
-        // Metrics Breakdown Card
+        // 2. Brokerage Breakdown Card
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = DarkSurface)
+            colors = CardDefaults.cardColors(containerColor = DarkSurface),
+            shape = RoundedCornerShape(16.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF1F3F9))
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Performance Breakdown", fontWeight = FontWeight.Bold, color = TextPrimary, style = MaterialTheme.typography.titleMedium)
-                Spacer(modifier = Modifier.height(16.dp))
-
-                MetricItem("Total Trades", totalTrades.toString())
-                MetricItem("Winning Trades", "$winCount  (${String.format("%.1f", (winCount.toFloat()/totalTrades)*100)}%)", GreenAccent)
-                MetricItem("Losing Trades", "$lossCount  (${String.format("%.1f", (lossCount.toFloat()/totalTrades)*100)}%)", RedAccent)
-                MetricItem("Average Win Size", "$${String.format("%.2f", avgWin)}", GreenAccent)
-                MetricItem("Average Loss Size", "$${String.format("%.2f", avgLoss)}", RedAccent)
-                MetricItem("Total Net Return", (if (totalNetPl>=0) "+" else "") + "$${String.format("%.2f", totalNetPl)}", if (totalNetPl >= 0) GreenAccent else RedAccent)
-            }
-        }
-
-        // Canvas Donut Win/Loss Chart
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = DarkSurface)
-        ) {
-            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    "Win / Loss Proportions",
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color(0xFFFFF7E6), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ReceiptLong,
+                            contentDescription = "Brokerage Breakdown",
+                            tint = Color(0xFFD97706),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Text(
+                        text = "Brokerage Breakdown",
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                
                 Spacer(modifier = Modifier.height(20.dp))
                 
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(160.dp)) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val angleWin = (winCount.toFloat() / totalTrades.toFloat()) * 360f
-                        val angleLoss = 360f - angleWin
-                        
-                        // Win chunk green
-                        drawArc(
-                            color = GreenAccent,
-                            startAngle = -90f,
-                            sweepAngle = angleWin,
-                            useCenter = false,
-                            style = Stroke(width = 24.dp.toPx())
-                        )
-                        // Loss chunk red
-                        drawArc(
-                            color = RedAccent,
-                            startAngle = -90f + angleWin,
-                            sweepAngle = angleLoss,
-                            useCenter = false,
-                            style = Stroke(width = 24.dp.toPx())
-                        )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val grossProfitVal = winTrades.sumOf { it.profit }
+                    val feesVal = filteredTrades.sumOf { it.brokerage }
+                    val netProfitVal = totalNetPl
+
+                    val grossPercent = if (baseEquity > 0.0) (grossProfitVal / baseEquity) * 100.0 else 0.0
+                    val feesPercent = if (grossProfitVal > 0.0) (feesVal / grossProfitVal) * 100.0 else if (baseEquity > 0) (feesVal / baseEquity) * 100.0 else 0.0
+                    val netPercent = if (baseEquity > 0.0) (netProfitVal / baseEquity) * 100.0 else 0.0
+
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                        Text("Gross Profit", fontSize = 11.sp, color = TextSecondary)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("+$${String.format(Locale.US, "%.0f", grossProfitVal)}", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = GreenAccent)
+                        Text("(+${String.format(Locale.US, "%.1f", grossPercent)}%)", fontSize = 11.sp, color = GreenAccent)
                     }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("${String.format("%.0f", winRate)}%", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        Text("Win Rate", fontSize = 11.sp, color = TextSecondary)
+                    
+                    Icon(
+                        imageVector = Icons.Default.ArrowForward,
+                        contentDescription = "to",
+                        tint = TextSecondary.copy(alpha = 0.5f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                        Text("Fees", fontSize = 11.sp, color = TextSecondary)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("-$${String.format(Locale.US, "%.0f", feesVal)}", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = RedAccent)
+                        Text("(${String.format(Locale.US, "%.1f", feesPercent)}%)", fontSize = 11.sp, color = RedAccent)
                     }
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Box(modifier = Modifier.size(12.dp).background(GreenAccent, CircleShape))
-                        Text("Wins ($winCount)", color = TextPrimary, fontSize = 13.sp)
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Box(modifier = Modifier.size(12.dp).background(RedAccent, CircleShape))
-                        Text("Losses ($lossCount)", color = TextPrimary, fontSize = 13.sp)
+                    
+                    Icon(
+                        imageVector = Icons.Default.ArrowForward,
+                        contentDescription = "to",
+                        tint = TextSecondary.copy(alpha = 0.5f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                        Text("Net Profit", fontSize = 11.sp, color = TextSecondary)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        val sign = if (netProfitVal >= 0) "+" else "-"
+                        val color = if (netProfitVal >= 0) GreenAccent else RedAccent
+                        Text("$sign$${String.format(Locale.US, "%.0f", Math.abs(netProfitVal))}", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = color)
+                        val pctSign = if (netPercent >= 0) "+" else ""
+                        Text("($pctSign${String.format(Locale.US, "%.1f", netPercent)}%)", fontSize = 11.sp, color = color)
                     }
                 }
             }
         }
 
-        // Beautiful Dynamic Canvas-compiled Equity Line Curve Chart
+        // 3. Consistency Matrix Calendar Grid
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = DarkSurface)
+            colors = CardDefaults.cardColors(containerColor = DarkSurface),
+            shape = RoundedCornerShape(16.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF1F3F9))
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    "Performance Equity Curve",
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    "Illustrates compound capital movement across chronologic trade list logs.",
-                    fontSize = 11.sp,
-                    color = TextSecondary
-                )
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Build equity coordinates starting from initial equity
-                // Chronological flow requires reversing standard order as newer is first indexed in DB, let's reverse items!
-                val orderedTrades = trades.reversed()
-                val equityNodes = remember(orderedTrades, baseEquity) {
-                    val list = mutableListOf<Double>()
-                    var currentEq = baseEquity
-                    list.add(currentEq)
-                    for (t in orderedTrades) {
-                        currentEq += (t.profit - t.brokerage)
-                        list.add(currentEq)
-                    }
-                    list
-                }
-
-                val minEq = equityNodes.minOrNull() ?: baseEquity
-                val maxEq = equityNodes.maxOrNull() ?: baseEquity
-                val range = if (maxEq - minEq > 0) maxEq - minEq else 100.0
-
-                Canvas(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(180.dp)
-                        .background(DarkBackground, RoundedCornerShape(12.dp))
-                        .padding(12.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val width = size.width
-                    val height = size.height
-                    val pointsCount = equityNodes.size
+                    Column {
+                        Text(
+                            text = "Consistency",
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = "Daily trading activity",
+                            fontSize = 11.sp,
+                            color = TextSecondary
+                        )
+                    }
                     
-                    if (pointsCount > 1) {
-                        val xStep = width / (pointsCount - 1)
-                        val path = Path()
-                        val fillPath = Path()
-
-                        for (i in 0 until pointsCount) {
-                            val eq = equityNodes[i]
-                            val x = i * xStep
-                            // Draw y offset from bottom: lower equity maps to high Y coordinate
-                            val normalizedY = ((eq - minEq) / range)
-                            val y = height - (normalizedY.toFloat() * height)
-                            
-                            if (i == 0) {
-                                path.moveTo(x, y)
-                                fillPath.moveTo(x, height)
-                                fillPath.lineTo(x, y)
-                            } else {
-                                path.lineTo(x, y)
-                                fillPath.lineTo(x, y)
-                            }
-                            if (i == pointsCount - 1) {
-                                fillPath.lineTo(x, height)
-                                fillPath.close()
+                    var showYearDropdown by remember { mutableStateOf(false) }
+                    Box {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFFF1F3F9).copy(alpha = 0.7f))
+                                .clickable { showYearDropdown = true }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(text = selectedYear.toString(), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                            Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp))
+                        }
+                        
+                        DropdownMenu(
+                            expanded = showYearDropdown,
+                            onDismissRequest = { showYearDropdown = false }
+                        ) {
+                            listOf(2024, 2025, 2026, 2027).forEach { yr ->
+                                DropdownMenuItem(
+                                    text = { Text(yr.toString()) },
+                                    onClick = {
+                                        selectedYear = yr
+                                        showYearDropdown = false
+                                    }
+                                )
                             }
                         }
-
-                        // Bottom fading overlay
-                        drawPath(
-                            path = fillPath,
-                            brush = Brush.verticalGradient(
-                                colors = listOf(Primary.copy(alpha = 0.3f), Color.Transparent),
-                                startY = 0f,
-                                endY = height
-                            )
-                        )
-
-                        // Outline line graph
-                        drawPath(
-                            path = path,
-                            color = Primary,
-                            style = Stroke(width = 3.dp.toPx())
-                        )
-
-                        // Points accent draw
-                        for (i in 0 until pointsCount) {
-                            val eq = equityNodes[i]
-                            val x = i * xStep
-                            val normalizedY = ((eq - minEq) / range)
-                            val y = height - (normalizedY.toFloat() * height)
-                            drawCircle(color = Color.White, radius = 4.dp.toPx(), center = androidx.compose.ui.geometry.Offset(x, y))
-                            drawCircle(color = Primary, radius = 2.dp.toPx(), center = androidx.compose.ui.geometry.Offset(x, y))
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    val months = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+                    for (m in 0 until 12) {
+                        val monthName = months[m]
+                        val daysInMonth = when (m) {
+                            1 -> if (selectedYear % 4 == 0) 29 else 28
+                            3, 5, 8, 10 -> 30
+                            else -> 31
+                        }
+                        
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(text = monthName, fontSize = 11.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            val cols = 5
+                            val rows = 6
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                for (r in 0 until rows) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        for (c in 0 until cols) {
+                                            val day = r * cols + c + 1
+                                            if (day <= daysInMonth) {
+                                                val todayTrades = filteredTrades.filter {
+                                                    val cal = Calendar.getInstance().apply { timeInMillis = it.timestamp }
+                                                    cal.get(Calendar.YEAR) == selectedYear &&
+                                                    cal.get(Calendar.MONTH) == m &&
+                                                    cal.get(Calendar.DAY_OF_MONTH) == day
+                                                }
+                                                val dotColor = if (todayTrades.isNotEmpty()) {
+                                                    val dailyNet = todayTrades.sumOf { it.profit - it.brokerage }
+                                                    if (dailyNet > 0) GreenAccent else RedAccent
+                                                } else {
+                                                    if (isSystemInDarkMode) Color(0xFF374151) else Color(0xFFE5E7EB)
+                                                }
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(8.dp)
+                                                        .background(dotColor, CircleShape)
+                                                )
+                                            } else {
+                                                Spacer(modifier = Modifier.size(8.dp))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
                 
                 Spacer(modifier = Modifier.height(12.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Baseline: $${String.format("%.1f", baseEquity)}", fontSize = 11.sp, color = TextSecondary)
-                    Text("Current Balance: $${String.format("%.2f", equityNodes.lastOrNull() ?: baseEquity)}", fontSize = 11.sp, color = Primary, fontWeight = FontWeight.SemiBold)
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(modifier = Modifier.size(6.dp).background(RedAccent, CircleShape))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Loss", fontSize = 10.sp, color = TextSecondary)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Box(modifier = Modifier.size(6.dp).background(GreenAccent, CircleShape))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Win", fontSize = 10.sp, color = TextSecondary)
                 }
             }
         }
+
+        // 4. Equity Curve Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = DarkSurface),
+            shape = RoundedCornerShape(16.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF1F3F9))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Equity Curve",
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = "Account growth over time",
+                            fontSize = 11.sp,
+                            color = TextSecondary
+                        )
+                    }
+                    
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = {
+                                if (equityPointLimit > 10) {
+                                    equityPointLimit = when (equityPointLimit) {
+                                        100 -> 50
+                                        50 -> 20
+                                        20 -> 10
+                                        else -> 10
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(Color(0xFFF1F3F9).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                        ) {
+                            Text("-", fontWeight = FontWeight.Bold, color = TextPrimary)
+                        }
+                        
+                        IconButton(
+                            onClick = {
+                                equityPointLimit = when (equityPointLimit) {
+                                    10 -> 20
+                                    20 -> 50
+                                    50 -> 100
+                                    else -> 100
+                                }
+                            },
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(Color(0xFFF1F3F9).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                        ) {
+                            Text("+", fontWeight = FontWeight.Bold, color = TextPrimary)
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                val orderedTrades = remember(filteredTrades) { filteredTrades.sortedBy { it.timestamp } }
+                val graphLimit = equityPointLimit
+                val displayTrades = remember(orderedTrades, graphLimit) {
+                    if (orderedTrades.size > graphLimit) orderedTrades.takeLast(graphLimit) else orderedTrades
+                }
+                
+                val equityNodes = remember(displayTrades, baseEquity) {
+                    val list = mutableListOf<Double>()
+                    var currentEq = baseEquity
+                    list.add(currentEq)
+                    for (t in displayTrades) {
+                        currentEq += (t.profit - t.brokerage)
+                        list.add(currentEq)
+                    }
+                    list
+                }
+                
+                val minEq = equityNodes.minOrNull() ?: baseEquity
+                val maxEq = equityNodes.maxOrNull() ?: baseEquity
+                val range = if (maxEq - minEq > 0) maxEq - minEq else 100.0
+                
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .background(
+                            if (isSystemInDarkMode) Color(0xFF111827) else Color(0xFFF9FAFC),
+                            RoundedCornerShape(12.dp)
+                        )
+                        .padding(12.dp)
+                ) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val width = size.width
+                        val height = size.height
+                        val pointsCount = equityNodes.size
+                        
+                        val gridCount = 4
+                        for (g in 0..gridCount) {
+                            val gridY = height * (g.toFloat() / gridCount)
+                            drawLine(
+                                color = TextSecondary.copy(alpha = 0.1f),
+                                start = androidx.compose.ui.geometry.Offset(0f, gridY),
+                                end = androidx.compose.ui.geometry.Offset(width, gridY),
+                                strokeWidth = 1.dp.toPx()
+                            )
+                        }
+                        
+                        if (pointsCount > 1) {
+                            val xStep = width / (pointsCount - 1)
+                            val path = Path()
+                            val fillPath = Path()
+                            
+                            for (i in 0 until pointsCount) {
+                                val eq = equityNodes[i]
+                                val x = i * xStep
+                                val normalizedY = ((eq - minEq) / range)
+                                val y = height - (normalizedY.toFloat() * height)
+                                
+                                if (i == 0) {
+                                    path.moveTo(x, y)
+                                    fillPath.moveTo(x, height)
+                                    fillPath.lineTo(x, y)
+                                } else {
+                                    path.lineTo(x, y)
+                                    fillPath.lineTo(x, y)
+                                }
+                                if (i == pointsCount - 1) {
+                                    fillPath.lineTo(x, height)
+                                    fillPath.close()
+                                }
+                            }
+                            
+                            drawPath(
+                                path = fillPath,
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(Primary.copy(alpha = 0.2f), Color.Transparent),
+                                    startY = 0f,
+                                    endY = height
+                                )
+                            )
+                            
+                            drawPath(
+                                path = path,
+                                color = Primary,
+                                style = Stroke(width = 3.dp.toPx())
+                            )
+                            
+                            for (i in 0 until pointsCount) {
+                                val eq = equityNodes[i]
+                                val x = i * xStep
+                                val normalizedY = ((eq - minEq) / range)
+                                val y = height - (normalizedY.toFloat() * height)
+                                drawCircle(color = Color.White, radius = 4.dp.toPx(), center = androidx.compose.ui.geometry.Offset(x, y))
+                                drawCircle(color = Primary, radius = 2.dp.toPx(), center = androidx.compose.ui.geometry.Offset(x, y))
+                            }
+                        }
+                    }
+                    
+                    Column(
+                        modifier = Modifier.fillMaxHeight(),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = "$${String.format(Locale.US, "%.0f", maxEq)}", fontSize = 10.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
+                        Text(text = "$${String.format(Locale.US, "%.0f", minEq + range / 2)}", fontSize = 10.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
+                        Text(text = "$${String.format(Locale.US, "%.0f", minEq)}", fontSize = 10.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Baseline: $${String.format(Locale.US, "%.1f", baseEquity)}", fontSize = 11.sp, color = TextSecondary)
+                    Text("Current Balance: $${String.format(Locale.US, "%.2f", equityNodes.lastOrNull() ?: baseEquity)}", fontSize = 11.sp, color = Primary, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+
+        // 5. Drawdown Analysis Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = DarkSurface),
+            shape = RoundedCornerShape(16.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF1F3F9))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Drawdown Analysis",
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = "Equity drops & recovery time",
+                            fontSize = 11.sp,
+                            color = TextSecondary
+                        )
+                    }
+                    
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = {
+                                if (drawdownPointLimit > 10) {
+                                    drawdownPointLimit = when (drawdownPointLimit) {
+                                        100 -> 50
+                                        50 -> 20
+                                        20 -> 10
+                                        else -> 10
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(Color(0xFFF1F3F9).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                        ) {
+                            Text("-", fontWeight = FontWeight.Bold, color = TextPrimary)
+                        }
+                        
+                        IconButton(
+                            onClick = {
+                                drawdownPointLimit = when (drawdownPointLimit) {
+                                    10 -> 20
+                                    20 -> 50
+                                    50 -> 100
+                                    else -> 100
+                                }
+                            },
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(Color(0xFFF1F3F9).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                        ) {
+                            Text("+", fontWeight = FontWeight.Bold, color = TextPrimary)
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                val orderedTradesForDd = remember(filteredTrades) { filteredTrades.sortedBy { it.timestamp } }
+                val ddLimit = drawdownPointLimit
+                val displayTradesForDd = remember(orderedTradesForDd, ddLimit) {
+                    if (orderedTradesForDd.size > ddLimit) orderedTradesForDd.takeLast(ddLimit) else orderedTradesForDd
+                }
+                
+                val (ddNodes, maxHistoricalDd, currentDd, daysUnderwater) = remember(displayTradesForDd, baseEquity) {
+                    val list = mutableListOf<Double>()
+                    var currentEq = baseEquity
+                    var peakEquity = baseEquity
+                    var maxDdVal = 0.0
+                    var currentDdVal = 0.0
+                    var peakTime = System.currentTimeMillis()
+                    var daysUnder = 0L
+                    
+                    list.add(0.0)
+                    
+                    for (t in displayTradesForDd) {
+                        currentEq += (t.profit - t.brokerage)
+                        if (currentEq > peakEquity) {
+                            peakEquity = currentEq
+                            peakTime = t.timestamp
+                        }
+                        val dd = peakEquity - currentEq
+                        if (dd > maxDdVal) {
+                            maxDdVal = dd
+                        }
+                        currentDdVal = dd
+                        
+                        val ddPercent = if (peakEquity > 0.0) (dd / peakEquity) * 100.0 else 0.0
+                        list.add(-ddPercent)
+                    }
+                    
+                    if (currentDdVal > 0.0) {
+                        daysUnder = (System.currentTimeMillis() - peakTime) / (24 * 3600 * 1000)
+                    }
+                    
+                    DrawdownCalculation(list, maxDdVal, currentDdVal, daysUnder)
+                }
+                
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1.3f)) {
+                        Text("Current DD", fontSize = 11.sp, color = TextSecondary)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        if (currentDd <= 0.0) {
+                            Text("None", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = GreenAccent)
+                            Text("At Peak", fontSize = 10.sp, color = TextSecondary)
+                        } else {
+                            Text("-$${String.format(Locale.US, "%.1f", currentDd)}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = RedAccent)
+                            Text("Active DD", fontSize = 10.sp, color = RedAccent)
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Time Underwater", fontSize = 11.sp, color = TextSecondary)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text("$daysUnderwater Days", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(if (currentDd <= 0.0) "Fully Recovered" else "Active Recovery", fontSize = 10.sp, color = TextSecondary)
+                    }
+                    Column(modifier = Modifier.weight(1.2f), horizontalAlignment = Alignment.End) {
+                        Text("Max Historical", fontSize = 11.sp, color = TextSecondary)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text("$${String.format(Locale.US, "%.2f", maxHistoricalDd)}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text("-", fontSize = 10.sp, color = TextSecondary)
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                val minDdPercent = ddNodes.minOrNull() ?: 0.0
+                val lowerBound = if (minDdPercent < -10.0) minDdPercent else -10.0
+                
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                        .background(
+                            if (isSystemInDarkMode) Color(0xFF111827) else Color(0xFFF9FAFC),
+                            RoundedCornerShape(12.dp)
+                        )
+                        .padding(12.dp)
+                ) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val width = size.width
+                        val height = size.height
+                        val pointsCount = ddNodes.size
+                        
+                        val gridCount = 4
+                        for (g in 0..gridCount) {
+                            val gridY = height * (g.toFloat() / gridCount)
+                            drawLine(
+                                color = TextSecondary.copy(alpha = 0.08f),
+                                start = androidx.compose.ui.geometry.Offset(0f, gridY),
+                                end = androidx.compose.ui.geometry.Offset(width, gridY),
+                                strokeWidth = 1.dp.toPx()
+                            )
+                        }
+                        
+                        if (pointsCount > 1) {
+                            val xStep = width / (pointsCount - 1)
+                            val path = Path()
+                            val fillPath = Path()
+                            
+                            for (i in 0 until pointsCount) {
+                                val ddPct = ddNodes[i]
+                                val x = i * xStep
+                                val normalizedY = (ddPct / lowerBound)
+                                val y = (normalizedY.toFloat() * height)
+                                
+                                if (i == 0) {
+                                    path.moveTo(x, y)
+                                    fillPath.moveTo(x, 0f)
+                                    fillPath.lineTo(x, y)
+                                } else {
+                                    path.lineTo(x, y)
+                                    fillPath.lineTo(x, y)
+                                }
+                                if (i == pointsCount - 1) {
+                                    fillPath.lineTo(x, 0f)
+                                    fillPath.close()
+                                }
+                            }
+                            
+                            drawPath(
+                                path = fillPath,
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(RedAccent.copy(alpha = 0.15f), Color.Transparent),
+                                    startY = 0f,
+                                    endY = height
+                                )
+                            )
+                            
+                            drawPath(
+                                path = path,
+                                color = RedAccent,
+                                style = Stroke(width = 2.5.dp.toPx())
+                            )
+                        }
+                    }
+                    
+                    Column(
+                        modifier = Modifier.fillMaxHeight(),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = "0.0%", fontSize = 10.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
+                        Text(text = "${String.format(Locale.US, "%.1f", lowerBound / 2)}%", fontSize = 10.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
+                        Text(text = "${String.format(Locale.US, "%.1f", lowerBound)}%", fontSize = 10.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // 6. Weekday Distribution Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = DarkSurface),
+            shape = RoundedCornerShape(16.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF1F3F9))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Weekday Distribution",
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFFF1F3F9).copy(alpha = 0.8f))
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    listOf("Profit", "Loss", "Combined").forEach { tab ->
+                        val isSelected = weekdayTab == tab
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (isSelected) Color.White else Color.Transparent)
+                                .clickable { weekdayTab = tab }
+                                .padding(vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = tab,
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSelected) TextPrimary else TextSecondary
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(20.dp))
+                
+                val weekdaysAbbr = listOf("Mon", "Tue", "Wed", "Thu", "Fri")
+                val weekdayValues = remember(filteredTrades, weekdayTab) {
+                    val map = mutableMapOf<Int, Double>()
+                    for (day in 2..6) {
+                        map[day] = 0.0
+                    }
+                    
+                    for (t in filteredTrades) {
+                        val cal = Calendar.getInstance().apply { timeInMillis = t.timestamp }
+                        val d = cal.get(Calendar.DAY_OF_WEEK)
+                        if (d in 2..6) {
+                            when (weekdayTab) {
+                                "Profit" -> {
+                                    if (t.profit > 0) {
+                                        map[d] = (map[d] ?: 0.0) + t.profit
+                                    }
+                                }
+                                "Loss" -> {
+                                    if (t.profit <= 0) {
+                                        map[d] = (map[d] ?: 0.0) + Math.abs(t.profit)
+                                    }
+                                }
+                                "Combined" -> {
+                                    map[d] = (map[d] ?: 0.0) + (t.profit - t.brokerage)
+                                }
+                            }
+                        }
+                    }
+                    map
+                }
+                
+                val maxVal = weekdayValues.values.maxOrNull()?.let { if (Math.abs(it) > 0.0) Math.abs(it) else 100.0 } ?: 100.0
+                
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(150.dp)
+                        .padding(horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    for (dayNum in 2..6) {
+                        val valDouble = weekdayValues[dayNum] ?: 0.0
+                        val dayName = weekdaysAbbr[dayNum - 2]
+                        val ratio = if (maxVal > 0.0) (Math.abs(valDouble) / maxVal).toFloat() else 0f
+                        
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Bottom,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = if (valDouble != 0.0) "$${String.format(Locale.US, "%.0f", valDouble)}" else "-",
+                                fontSize = 10.sp,
+                                color = if (valDouble >= 0) GreenAccent else RedAccent,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Box(
+                                modifier = Modifier
+                                    .width(28.dp)
+                                    .fillMaxHeight(ratio.coerceIn(0.04f, 1f))
+                                    .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
+                                    .background(
+                                        if (valDouble >= 0) GreenAccent.copy(alpha = 0.8f) else RedAccent.copy(alpha = 0.8f)
+                                    )
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(text = dayName, fontSize = 11.sp, color = TextSecondary, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+        }
+
+        // 7. Profit / Loss History Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = DarkSurface),
+            shape = RoundedCornerShape(16.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF1F3F9))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Profit / Loss History",
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFFF1F3F9).copy(alpha = 0.8f))
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    listOf("Daily P/L", "Monthly P/L").forEach { tab ->
+                        val isSelected = historyTab == tab
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (isSelected) Color.White else Color.Transparent)
+                                .clickable { historyTab = tab }
+                                .padding(vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = tab,
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSelected) TextPrimary else TextSecondary
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(20.dp))
+                
+                val historyList = remember(filteredTrades, historyTab) {
+                    val entries = mutableListOf<Pair<String, Double>>()
+                    if (filteredTrades.isEmpty()) {
+                        if (historyTab == "Daily P/L") {
+                            entries.add(Pair("T-3", 0.0))
+                            entries.add(Pair("T-2", 0.0))
+                            entries.add(Pair("T-1", 0.0))
+                            entries.add(Pair("Today", 0.0))
+                        } else {
+                            entries.add(Pair("Jan", 0.0))
+                            entries.add(Pair("Feb", 0.0))
+                            entries.add(Pair("Mar", 0.0))
+                            entries.add(Pair("Apr", 0.0))
+                        }
+                    } else {
+                        if (historyTab == "Daily P/L") {
+                            val dateFormat = SimpleDateFormat("MMM d", Locale.US)
+                            val grouped = filteredTrades.groupBy {
+                                val cal = Calendar.getInstance().apply { timeInMillis = it.timestamp }
+                                dateFormat.format(cal.time)
+                            }
+                            val sortedDays = grouped.keys.toList().sortedByDescending { key ->
+                                filteredTrades.first { dateFormat.format(Date(it.timestamp)) == key }.timestamp
+                            }.take(5).reversed()
+                            
+                            sortedDays.forEach { dayName ->
+                                val sum = grouped[dayName]?.sumOf { it.profit - it.brokerage } ?: 0.0
+                                entries.add(Pair(dayName, sum))
+                            }
+                        } else {
+                            val monthFormat = SimpleDateFormat("MMM", Locale.US)
+                            val grouped = filteredTrades.groupBy {
+                                val cal = Calendar.getInstance().apply { timeInMillis = it.timestamp }
+                                monthFormat.format(cal.time)
+                            }
+                            val monthsOrdered = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+                            monthsOrdered.forEach { m ->
+                                if (grouped.containsKey(m)) {
+                                    val sum = grouped[m]?.sumOf { it.profit - it.brokerage } ?: 0.0
+                                    entries.add(Pair(m, sum))
+                                }
+                            }
+                            if (entries.isEmpty()) {
+                                entries.add(Pair("Jan", 0.0))
+                                entries.add(Pair("Feb", 0.0))
+                            }
+                        }
+                    }
+                    entries
+                }
+                
+                val maxHistoryVal = historyList.map { Math.abs(it.second) }.maxOrNull()?.let { if (it > 0.0) it else 100.0 } ?: 100.0
+                
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(150.dp)
+                        .padding(horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    historyList.forEach { (label, value) ->
+                        val ratio = (Math.abs(value) / maxHistoryVal).toFloat()
+                        
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Bottom,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = if (value != 0.0) "$${String.format(Locale.US, "%.0f", value)}" else "-",
+                                fontSize = 10.sp,
+                                color = if (value >= 0) GreenAccent else RedAccent,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Box(
+                                modifier = Modifier
+                                    .width(28.dp)
+                                    .fillMaxHeight(ratio.coerceIn(0.04f, 1f))
+                                    .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
+                                    .background(
+                                        if (value >= 0) GreenAccent.copy(alpha = 0.8f) else RedAccent.copy(alpha = 0.8f)
+                                    )
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(text = label, fontSize = 11.sp, color = TextSecondary, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (viewModel.showCertificateDialog) {
+        val userName = viewModel.currentUser?.name ?: "Kartik"
+        TradingCertificateDialog(
+            userName = userName,
+            periodTitle = "LIFETIME PERFORMANCE",
+            netPl = totalNetPl,
+            winRate = winRate.toDouble(),
+            roi = roi,
+            tradesCount = totalTrades,
+            onDismiss = { viewModel.showCertificateDialog = false }
+        )
     }
 }
 
@@ -2178,4 +3166,654 @@ fun CommunityScreen(viewModel: TradeViewModel) {
             }
         }
     }
+}
+
+// Rank & tips based on interactive metrics/performance
+fun getRankAndTip(tradesCount: Int, winRate: Double, netPl: Double, roi: Double): Pair<String, String> {
+    return when {
+        tradesCount <= 0 -> "OBSERVER" to "Waiting for setup..."
+        tradesCount in 1..4 -> "APPRENTICE" to "Building foundations..."
+        netPl > 0 && roi >= 15.0 && winRate >= 55.0 -> "MARKET MASTER" to "Apex market navigator!"
+        netPl > 0 && roi >= 8.0 -> "PROP TRADER" to "Funding material level!"
+        netPl > 0 && winRate >= 50.0 -> "CONSISTENT TRADER" to "High discipline established!"
+        netPl > 0 -> "SURVIVOR" to "Maintaining safety edge"
+        else -> "STUDENT" to "Evaluating market rhythm..."
+    }
+}
+
+@Composable
+fun TradingCertificateDialog(
+    userName: String,
+    periodTitle: String,
+    netPl: Double,
+    winRate: Double,
+    roi: Double,
+    tradesCount: Int,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val (rank, tip) = remember(tradesCount, winRate, netPl, roi) {
+        getRankAndTip(tradesCount, winRate, netPl, roi)
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .wrapContentHeight(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                // Elegant double border inner container
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(10.dp)
+                        .border(1.5.dp, Color(0xFFC5C2B7), RoundedCornerShape(16.dp))
+                        .padding(4.dp)
+                        .border(0.8.dp, Color(0xFFE5E2D7), RoundedCornerShape(12.dp))
+                        .padding(16.dp)
+                ) {
+                    // Background shadow decorative element
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .alpha(0.02f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.EmojiEvents,
+                            contentDescription = null,
+                            modifier = Modifier.size(160.dp),
+                            tint = Color.Black
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        // Title: TRADING CERTIFICATE
+                        Text(
+                            text = "TRADING CERTIFICATE",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = Color(0xFF4A453A),
+                            letterSpacing = 1.5.sp
+                        )
+                        
+                        // Subtitle: MONTH OF MAY 2026
+                        Text(
+                            text = periodTitle.uppercase(Locale.US),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = Color(0xFF7C7565),
+                            letterSpacing = 0.8.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // This certifies that
+                        Text(
+                            text = "This certifies that",
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                            fontSize = 14.sp,
+                            color = Color(0xFF7C7565)
+                        )
+
+                        // Big Elegant Name
+                        Text(
+                            text = userName,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 28.sp,
+                            color = Color(0xFF1F2937)
+                        )
+
+                        // Subtle line under Name
+                        Box(
+                            modifier = Modifier
+                                .width(120.dp)
+                                .height(1.dp)
+                                .background(Color(0xFFE5E2D7))
+                        )
+
+                        // has achieved the rank of
+                        Text(
+                            text = "has achieved the rank of",
+                            fontSize = 11.sp,
+                            color = Color(0xFF7C7565)
+                        )
+
+                        // Rank badge shape
+                        Box(
+                            modifier = Modifier
+                                .border(1.dp, Color(0xFFBCAE99), RoundedCornerShape(50.dp))
+                                .background(Color(0xFFFBF9F6), RoundedCornerShape(50.dp))
+                                .padding(horizontal = 20.dp, vertical = 6.dp),
+                             contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = rank,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = Color(0xFF8C7B65),
+                                letterSpacing = 1.2.sp
+                            )
+                        }
+
+                        // Tip underneath rank
+                        Text(
+                            text = tip,
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                            fontSize = 11.sp,
+                            color = Color(0xFF9CA3AF)
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Wide Subtle Divider
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(Color(0xFFECEAE4))
+                        )
+
+                        // Stats row: 3 columns with vertical dividers
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            // NET P/L
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                val prefix = if (netPl >= 0) "+$" else "-$"
+                                val formattedVal = "$prefix${String.format(Locale.US, "%.0f", Math.abs(netPl))}"
+                                Text(
+                                    text = formattedVal,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = if (netPl >= 0) Color(0xFF10B981) else Color(0xFFEF4444)
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "NET P/L",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF978F80)
+                                )
+                            }
+
+                            // Divider
+                            Box(
+                                modifier = Modifier
+                                    .height(24.dp)
+                                    .width(1.dp)
+                                    .background(Color(0xFFE5E2D7))
+                            )
+
+                            // WIN RATE
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = String.format(Locale.US, "%.1f%%", winRate),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = Color(0xFF1F2937)
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "WIN RATE",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF978F80)
+                                )
+                            }
+
+                            // Divider
+                            Box(
+                                modifier = Modifier
+                                    .height(24.dp)
+                                    .width(1.dp)
+                                    .background(Color(0xFFE5E2D7))
+                            )
+
+                            // ROI
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                val sign = if (roi >= 0) "+" else ""
+                                Text(
+                                    text = "$sign${String.format(Locale.US, "%.1f%%", roi)}",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = if (roi >= 0) Color(0xFF10B981) else Color(0xFFEF4444)
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "ROI",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF978F80)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Verified bottom stamp bar
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Verified by BookFx",
+                                fontSize = 10.sp,
+                                color = Color(0xFF9CA3AF),
+                                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                            )
+
+                            // Check Circle seal
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .background(Color(0xFFF3F1EC), CircleShape)
+                                    .border(0.8.dp, Color(0xFFD4CFC5), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = "Verified Seal",
+                                    tint = Color(0xFF8C7B65),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Share Button
+                Button(
+                    onClick = {
+                        shareCertificateAsImage(
+                            context = context,
+                            userName = userName,
+                            periodTitle = periodTitle,
+                            netPl = netPl,
+                            winRate = winRate,
+                            roi = roi,
+                            rank = rank,
+                            tip = tip
+                        )
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                    shape = RoundedCornerShape(30.dp),
+                    modifier = Modifier.weight(1f).height(48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Share, 
+                        contentDescription = "Share",
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Share", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                }
+
+                // Close Button
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5A5F6B)),
+                    shape = RoundedCornerShape(30.dp),
+                    modifier = Modifier.height(48.dp)
+                ) {
+                    Text("Close", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+            }
+        }
+    }
+}
+
+private fun shareCertificateAsImage(
+    context: android.content.Context,
+    userName: String,
+    periodTitle: String,
+    netPl: Double,
+    winRate: Double,
+    roi: Double,
+    rank: String,
+    tip: String
+) {
+    try {
+        val bitmap = generateCertificateBitmap(userName, periodTitle, netPl, winRate, roi, rank, tip)
+        val imagesFolder = File(context.cacheDir, "images")
+        imagesFolder.mkdirs()
+        val file = File(imagesFolder, "bookfx_certificate.png")
+        val stream = FileOutputStream(file)
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+        stream.close()
+
+        val contentUri = androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "com.example.fileprovider",
+            file
+        )
+
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(Intent.EXTRA_STREAM, contentUri)
+            putExtra(Intent.EXTRA_SUBJECT, "My BookFx Performance")
+            putExtra(Intent.EXTRA_TEXT, "🎯 Proud of my trading performance certificate from BookFx!")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, "Share Certificate Photo via"))
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
+
+private fun generateCertificateBitmap(
+    userName: String,
+    periodTitle: String,
+    netPl: Double,
+    winRate: Double,
+    roi: Double,
+    rank: String,
+    tip: String
+): Bitmap {
+    val width = 1200
+    val height = 1600
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = AndroidCanvas(bitmap)
+
+    // 1. Draw Cream/White Background
+    val bgPaint = AndroidPaint().apply {
+        color = 0xFFFFFFFF.toInt() // White background
+        style = AndroidPaint.Style.FILL
+    }
+    canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
+
+    // Fill slight warm cream background inside
+    val innerBgPaint = AndroidPaint().apply {
+        color = 0xFFFAFBF9.toInt() // #FAFBF9
+        style = AndroidPaint.Style.FILL
+    }
+    canvas.drawRect(40f, 40f, (width - 40).toFloat(), (height - 40).toFloat(), innerBgPaint)
+
+    // 2. Outer Border (Double frame)
+    // Primary outer border
+    val border1Paint = AndroidPaint().apply {
+        color = 0xFFC5C2B7.toInt() // C5C2B7
+        style = AndroidPaint.Style.STROKE
+        strokeWidth = 6f
+        isAntiAlias = true
+    }
+    val rOuter = AndroidRectF(50f, 50f, (width - 50).toFloat(), (height - 50).toFloat())
+    canvas.drawRoundRect(rOuter, 36f, 36f, border1Paint)
+
+    // Inner finer border
+    val border2Paint = AndroidPaint().apply {
+        color = 0xFFE5E2D7.toInt() // E5E2D7
+        style = AndroidPaint.Style.STROKE
+        strokeWidth = 3f
+        isAntiAlias = true
+    }
+    val rInner = AndroidRectF(66f, 66f, (width - 66).toFloat(), (height - 66).toFloat())
+    canvas.drawRoundRect(rInner, 24f, 24f, border2Paint)
+
+    // 3. Watermark Trophy in Background (Center of the certificate, drawn beautifully)
+    val wmPaint = AndroidPaint().apply {
+        color = 0x05000000 // Alpha ~0.02
+        style = AndroidPaint.Style.FILL
+        isAntiAlias = true
+    }
+    val wmStrokePaint = AndroidPaint().apply {
+        color = 0x0A000000 // Alpha ~0.04
+        style = AndroidPaint.Style.STROKE
+        strokeWidth = 4f
+        isAntiAlias = true
+    }
+    
+    // Draw stylized trophy at the center (X=600, Y=800)
+    val trophyPath = AndroidPath().apply {
+        // Upper bowl
+        moveTo(500f, 700f)
+        lineTo(700f, 700f)
+        cubicTo(700f, 850f, 500f, 850f, 500f, 700f)
+        // Stand/stem
+        moveTo(580f, 840f)
+        lineTo(620f, 840f)
+        lineTo(620f, 920f)
+        lineTo(580f, 920f)
+        close()
+        // Base
+        moveTo(520f, 920f)
+        lineTo(680f, 920f)
+        lineTo(660f, 960f)
+        lineTo(540f, 960f)
+        close()
+        // Left Handle
+        moveTo(500f, 730f)
+        cubicTo(430f, 730f, 430f, 800f, 500f, 800f)
+        // Right Handle
+        moveTo(700f, 730f)
+        cubicTo(770f, 730f, 770f, 800f, 700f, 800f)
+    }
+    canvas.drawPath(trophyPath, wmPaint)
+    canvas.drawPath(trophyPath, wmStrokePaint)
+
+    // 4. Texts
+    val textPaint = AndroidPaint().apply {
+        textAlign = AndroidPaint.Align.CENTER
+        isAntiAlias = true
+    }
+
+    // Title: TRADING CERTIFICATE
+    textPaint.apply {
+        color = 0xFF4A453A.toInt()
+        textSize = 42f
+        typeface = AndroidTypeface.create(AndroidTypeface.SANS_SERIF, AndroidTypeface.BOLD)
+    }
+    canvas.drawText("T R A D I N G   C E R T I F I C A T E", 600f, 220f, textPaint)
+
+    // Subtitle: LIFETIME PERFORMANCE
+    textPaint.apply {
+        color = 0xFF7C7565.toInt()
+        textSize = 28f
+        typeface = AndroidTypeface.create(AndroidTypeface.SANS_SERIF, AndroidTypeface.BOLD)
+    }
+    canvas.drawText(periodTitle.uppercase(Locale.US), 600f, 290f, textPaint)
+
+    // "This certifies that"
+    textPaint.apply {
+        color = 0xFF7C7565.toInt()
+        textSize = 36f
+        typeface = AndroidTypeface.create(AndroidTypeface.SERIF, AndroidTypeface.ITALIC)
+    }
+    canvas.drawText("This certifies that", 600f, 385f, textPaint)
+
+    // User's Name
+    textPaint.apply {
+        color = 0xFF1F2937.toInt()
+        textSize = 64f
+        typeface = AndroidTypeface.create(AndroidTypeface.SANS_SERIF, AndroidTypeface.BOLD)
+    }
+    canvas.drawText(userName, 600f, 490f, textPaint)
+
+    // Underline beneath Name
+    val linePaint = AndroidPaint().apply {
+        color = 0xFFE5E2D7.toInt()
+        strokeWidth = 3f
+        style = AndroidPaint.Style.STROKE
+    }
+    canvas.drawLine(440f, 530f, 760f, 530f, linePaint)
+
+    // "has achieved the rank of"
+    textPaint.apply {
+        color = 0xFF7C7565.toInt()
+        textSize = 28f
+        typeface = AndroidTypeface.create(AndroidTypeface.SANS_SERIF, AndroidTypeface.NORMAL)
+    }
+    canvas.drawText("has achieved the rank of", 600f, 600f, textPaint)
+
+    // Rank Badge
+    val badgeRect = AndroidRectF(400f, 650f, 800f, 740f)
+    val badgeBgPaint = AndroidPaint().apply {
+        color = 0xFFFBF9F6.toInt()
+        style = AndroidPaint.Style.FILL
+        isAntiAlias = true
+    }
+    val badgeBorderPaint = AndroidPaint().apply {
+        color = 0xFFBCAE99.toInt()
+        style = AndroidPaint.Style.STROKE
+        strokeWidth = 3f
+        isAntiAlias = true
+    }
+    canvas.drawRoundRect(badgeRect, 45f, 45f, badgeBgPaint)
+    canvas.drawRoundRect(badgeRect, 45f, 45f, badgeBorderPaint)
+
+    // Rank Name in Badge
+    textPaint.apply {
+        color = 0xFF8C7B65.toInt()
+        textSize = 34f
+        typeface = AndroidTypeface.create(AndroidTypeface.SANS_SERIF, AndroidTypeface.BOLD)
+    }
+    canvas.drawText(rank, 600f, 708f, textPaint)
+
+    // Tip/Motto
+    textPaint.apply {
+        color = 0xFF9CA3AF.toInt()
+        textSize = 26f
+        typeface = AndroidTypeface.create(AndroidTypeface.SANS_SERIF, AndroidTypeface.ITALIC)
+    }
+    canvas.drawText(tip, 600f, 795f, textPaint)
+
+    // Divider before Stats
+    val dividerPaint = AndroidPaint().apply {
+        color = 0xFFECEAE4.toInt()
+        strokeWidth = 2.5f
+        style = AndroidPaint.Style.STROKE
+    }
+    canvas.drawLine(150f, 870f, 1050f, 870f, dividerPaint)
+
+    // Stats Section (Y baseline 960 to 1040)
+    val sign = if (roi >= 0) "+" else ""
+    val prefix = if (netPl >= 0) "+$" else "-$"
+    val formattedNetPl = "$prefix${String.format(Locale.US, "%.0f", Math.abs(netPl))}"
+    
+    // Value Net PL
+    textPaint.apply {
+        color = if (netPl >= 0) 0xFF10B981.toInt() else 0xFFEF4444.toInt()
+        textSize = 46f
+        typeface = AndroidTypeface.create(AndroidTypeface.SANS_SERIF, AndroidTypeface.BOLD)
+    }
+    canvas.drawText(formattedNetPl, 300f, 960f, textPaint)
+    
+    // Label Net PL
+    textPaint.apply {
+        color = 0xFF978F80.toInt()
+        textSize = 24f
+        typeface = AndroidTypeface.create(AndroidTypeface.SANS_SERIF, AndroidTypeface.BOLD)
+    }
+    canvas.drawText("NET P/L", 300f, 1015f, textPaint)
+
+    // Divider 1 (X = 450)
+    val verticalDividerPaint = AndroidPaint().apply {
+        color = 0xFFE5E2D7.toInt()
+        strokeWidth = 3.5f
+    }
+    canvas.drawLine(450f, 930f, 450f, 1030f, verticalDividerPaint)
+
+    // Win Rate (Col 2)
+    textPaint.apply {
+        color = 0xFF1F2937.toInt()
+        textSize = 46f
+        typeface = AndroidTypeface.create(AndroidTypeface.SANS_SERIF, AndroidTypeface.BOLD)
+    }
+    canvas.drawText(String.format(Locale.US, "%.1f%%", winRate), 600f, 960f, textPaint)
+    
+    textPaint.apply {
+        color = 0xFF978F80.toInt()
+        textSize = 24f
+        typeface = AndroidTypeface.create(AndroidTypeface.SANS_SERIF, AndroidTypeface.BOLD)
+    }
+    canvas.drawText("WIN RATE", 600f, 1015f, textPaint)
+
+    // Divider 2 (X = 750)
+    canvas.drawLine(750f, 930f, 750f, 1030f, verticalDividerPaint)
+
+    // ROI (Col 3)
+    textPaint.apply {
+        color = if (roi >= 0) 0xFF10B981.toInt() else 0xFFEF4444.toInt()
+        textSize = 46f
+        typeface = AndroidTypeface.create(AndroidTypeface.SANS_SERIF, AndroidTypeface.BOLD)
+    }
+    canvas.drawText("$sign${String.format(Locale.US, "%.1f%%", roi)}", 900f, 960f, textPaint)
+    
+    textPaint.apply {
+        color = 0xFF978F80.toInt()
+        textSize = 24f
+        typeface = AndroidTypeface.create(AndroidTypeface.SANS_SERIF, AndroidTypeface.BOLD)
+    }
+    canvas.drawText("ROI", 900f, 1015f, textPaint)
+
+    // Divider after Stats
+    canvas.drawLine(150f, 1100f, 1050f, 1100f, dividerPaint)
+
+    // 5. Verification Bottom Stamp (Y = 1260)
+    val leftTextPaint = AndroidPaint().apply {
+        color = 0xFF9CA3AF.toInt()
+        textSize = 28f
+        typeface = AndroidTypeface.create(AndroidTypeface.SANS_SERIF, AndroidTypeface.ITALIC)
+        textAlign = AndroidPaint.Align.LEFT
+        isAntiAlias = true
+    }
+    canvas.drawText("Verified by BookFx", 180f, 1260f, leftTextPaint)
+
+    // Right Verification Badge / Seal (Center at X = 1000, Y = 1250)
+    val sealBgPaint = AndroidPaint().apply {
+        color = 0xFF8C7B65.toInt()
+        style = AndroidPaint.Style.FILL
+        isAntiAlias = true
+    }
+    canvas.drawCircle(1000f, 1250f, 40f, sealBgPaint)
+
+    val checkPaint = AndroidPaint().apply {
+        color = 0xFFFFFFFF.toInt()
+        style = AndroidPaint.Style.STROKE
+        strokeWidth = 6f
+        strokeCap = AndroidPaint.Cap.ROUND
+        isAntiAlias = true
+    }
+    val checkPath = AndroidPath().apply {
+        moveTo(980f, 1250f)
+        lineTo(995f, 1265f)
+        lineTo(1020f, 1235f)
+    }
+    canvas.drawPath(checkPath, checkPaint)
+
+    return bitmap
 }

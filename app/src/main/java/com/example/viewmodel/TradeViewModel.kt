@@ -45,6 +45,7 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
     // "DASHBOARD", "MANAGE", "JOURNAL", "ANALYTICS", "CALC", "COMMUNITY"
     var currentMainTab by mutableStateOf("DASHBOARD")
     var isViewingSettingsProfile by mutableStateOf(false)
+    var showCertificateDialog by mutableStateOf(false)
 
     // Settings States
     var isDarkMode by mutableStateOf(false)
@@ -315,6 +316,34 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
     var tradeNotes by mutableStateOf("")
     var manageMessage by mutableStateOf<String?>(null)
 
+    var editingTradeId by mutableStateOf<Int?>(null)
+
+    fun startEditTrade(trade: Trade) {
+        editingTradeId = trade.id
+        tradeSymbol = trade.symbol
+        tradeIsBuy = trade.isBuy
+        tradeEntryPrice = if (trade.entryPrice == 0.0) "" else trade.entryPrice.toString()
+        tradeExitPrice = if (trade.exitPrice == 0.0) "" else trade.exitPrice.toString()
+        tradeSize = if (trade.size == 0.0) "" else trade.size.toString()
+        tradeProfit = trade.profit.toString()
+        tradeBrokerage = if (trade.brokerage == 0.0) "" else trade.brokerage.toString()
+        tradeNotes = trade.notes
+        manageMessage = null
+    }
+
+    fun clearTradeForm() {
+        editingTradeId = null
+        tradeSymbol = ""
+        tradeIsBuy = true
+        tradeEntryPrice = ""
+        tradeExitPrice = ""
+        tradeSize = ""
+        tradeProfit = ""
+        tradeBrokerage = ""
+        tradeNotes = ""
+        manageMessage = null
+    }
+
     // Interactive Custom Portfolio fields
     var portfolioNameInput by mutableStateOf("")
     var portfolioBrokerInput by mutableStateOf("")
@@ -517,7 +546,13 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             val activeId = activePortfolio?.id ?: 0
+            val oldTrade = allTrades.value.find { it.id == editingTradeId }
+            val oldProfit = oldTrade?.profit ?: 0.0
+            val oldBrokerage = oldTrade?.brokerage ?: 0.0
+            val originalTimestamp = oldTrade?.timestamp ?: (customTimestamp ?: System.currentTimeMillis())
+
             val trade = Trade(
+                id = editingTradeId ?: 0,
                 symbol = symbol,
                 isBuy = tradeIsBuy,
                 entryPrice = entry,
@@ -527,28 +562,22 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
                 brokerage = broker,
                 notes = tradeNotes.trim(),
                 portfolioId = activeId,
-                timestamp = customTimestamp ?: System.currentTimeMillis()
+                timestamp = originalTimestamp
             )
             repository.insertTrade(trade)
             
             // Adjust current user's equity according to profit & brokerage deduction
             currentUser?.let { user ->
-                val updatedEquity = user.totalEquity + profitValue - broker
+                val updatedEquity = user.totalEquity - oldProfit + oldBrokerage + profitValue - broker
                 val updatedUser = user.copy(totalEquity = updatedEquity)
                 repository.updateUser(updatedUser)
                 currentUser = updatedUser
             }
 
-            // Clear manage fields
-            tradeSymbol = ""
-            tradeEntryPrice = ""
-            tradeExitPrice = ""
-            tradeSize = ""
-            tradeProfit = ""
-            tradeBrokerage = ""
-            tradeNotes = ""
+            val isEditMode = editingTradeId != null
+            clearTradeForm()
             
-            manageMessage = "Trade added successfully!"
+            manageMessage = if (isEditMode) "Trade updated successfully!" else "Trade added successfully!"
         }
     }
 

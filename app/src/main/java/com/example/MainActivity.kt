@@ -188,7 +188,7 @@ fun MainPortal(viewModel: TradeViewModel) {
                                 text = when (viewModel.currentMainTab) {
                                     "MANAGE" -> "Manage Trades"
                                     "JOURNAL" -> "Journal Records"
-                                    "ANALYTICS" -> "Performance Analytics"
+                                    "ANALYTICS" -> "Analytics"
                                     "SETTINGS" -> if (viewModel.isViewingSettingsProfile) "My Profile" else "Settings"
                                     "NOTES" -> "Notes & Lessons"
                                     else -> "BookFx"
@@ -199,7 +199,15 @@ fun MainPortal(viewModel: TradeViewModel) {
                             )
                         }
                         
-                        if (viewModel.currentMainTab != "SETTINGS" && viewModel.currentMainTab != "NOTES") {
+                        if (viewModel.currentMainTab == "ANALYTICS") {
+                            IconButton(onClick = { viewModel.showCertificateDialog = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.EmojiEvents,
+                                    contentDescription = "Achievements",
+                                    tint = Color(0xFFFFC107)
+                                )
+                            }
+                        } else if (viewModel.currentMainTab != "SETTINGS" && viewModel.currentMainTab != "NOTES") {
                             IconButton(onClick = { viewModel.handleLogout() }) {
                                 Icon(Icons.Default.Logout, contentDescription = "Logout", tint = elementColor)
                             }
@@ -736,17 +744,6 @@ fun DashboardWidgets(
                                                 fontSize = 11.sp
                                             )
                                         }
-                                    }
-                                    IconButton(
-                                        onClick = { onDeleteTrade(trade) },
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Delete,
-                                            contentDescription = "Delete Trade",
-                                            tint = Color(0xFFEF4444).copy(alpha = 0.7f),
-                                            modifier = Modifier.size(16.dp)
-                                        )
                                     }
                                 }
                             }

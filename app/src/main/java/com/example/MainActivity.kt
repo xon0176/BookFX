@@ -500,82 +500,7 @@ fun DashboardWidgets(
     }
     val topHighlightsToShow = if (orderedHighlights.isNotEmpty()) orderedHighlights.take(3) else allOptions.take(3)
 
-    // Pull-to-refresh states
-    var pullDelta by remember { mutableStateOf(0f) }
-    var isRefreshing by remember { mutableStateOf(false) }
-    val coroutineScope = rememberCoroutineScope()
-
-    val maxPullOffset = 320f
-    val dragResistance = 0.5f
-
-    val nestedScrollConnection = remember {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (isRefreshing) return Offset.Zero
-                // If user is pulling up, reduce the pull offset first before scrolling
-                if (available.y < 0 && pullDelta > 0) {
-                    val prev = pullDelta
-                    pullDelta = Math.max(0f, pullDelta + available.y)
-                    return Offset(0f, pullDelta - prev)
-                }
-                return Offset.Zero
-            }
-
-            override fun onPostScroll(
-                consumed: Offset,
-                available: Offset,
-                source: NestedScrollSource
-            ): Offset {
-                if (isRefreshing) return Offset.Zero
-                // Pulling down at the top of scroll
-                if (available.y > 0 && scrollState.value == 0) {
-                    pullDelta = Math.min(maxPullOffset, pullDelta + available.y * dragResistance)
-                    return Offset(0f, available.y)
-                }
-                return Offset.Zero
-            }
-
-            override suspend fun onPreFling(available: Velocity): Velocity {
-                if (isRefreshing) return Velocity.Zero
-                if (pullDelta >= 170f) {
-                    isRefreshing = true
-                    pullDelta = 170f
-                    coroutineScope.launch {
-                        // Refresh all VM stats and trigger reload
-                        viewModel.refreshAllData()
-                        delay(1200) // Visual rotation for a beautiful, satisfying re-sync response
-                        isRefreshing = false
-                        pullDelta = 0f
-                    }
-                } else {
-                    pullDelta = 0f
-                }
-                return Velocity.Zero
-            }
-        }
-    }
-
-    val animatedOffset by animateFloatAsState(
-        targetValue = pullDelta,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
-    )
-
-    val infiniteTransition = rememberInfiniteTransition(label = "RefreshRotation")
-    val rotationAngle by if (isRefreshing) {
-        infiniteTransition.animateFloat(
-            initialValue = 0f,
-            targetValue = 360f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(1000, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart
-            ),
-            label = "Rotation"
-        )
-    } else {
-        remember(pullDelta) { mutableStateOf(pullDelta * 2f) }
-    }
-
-    Box(modifier = Modifier.fillMaxSize().nestedScroll(nestedScrollConnection)) {
+    Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -1136,37 +1061,7 @@ fun DashboardWidgets(
             }
         }
 
-        if (animatedOffset > 10f || isRefreshing) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.TopCenter)
-                    .offset(y = (-30 + animatedOffset / 3f).dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .shadow(elevation = 6.dp, shape = CircleShape)
-                        .background(if (isSystemInDarkMode) Color(0xFF1E293B) else Color.White, CircleShape)
-                        .border(
-                            width = 1.dp,
-                            color = if (isSystemInDarkMode) Color(0xFF334155) else Color(0xFFE2E8F0),
-                            shape = CircleShape
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = "Refreshing",
-                        tint = Color(0xFF2E6FF2),
-                        modifier = Modifier
-                            .size(24.dp)
-                            .rotate(rotationAngle)
-                    )
-                }
-            }
-        }
+
     }
 }
 

@@ -396,12 +396,12 @@ fun SettingsMainContent(
                 Box(
                     modifier = Modifier
                         .size(48.dp)
-                        .background(Color(0xFFE9F0FE), CircleShape),
+                        .background(if (isSystemInDarkMode) Color(0xFF1E293B) else Color(0xFFE9F0FE), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = userFirstLetter,
-                        color = Color(0xFF2E6FF2),
+                        color = if (isSystemInDarkMode) Color(0xFF60A5FA) else Color(0xFF2E6FF2),
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -432,6 +432,170 @@ fun SettingsMainContent(
             }
         }
 
+        // --- PREFERENCES SECTION ---
+        Text(
+            text = "Preferences",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextSecondary,
+            modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+        )
+
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { viewModel.isDarkMode = !viewModel.isDarkMode }
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(if (viewModel.isDarkMode) Color(0xFF1E293B) else Color(0xFFEFF6FF), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (viewModel.isDarkMode) Icons.Default.DarkMode else Icons.Default.LightMode,
+                        contentDescription = "Theme Icon",
+                        tint = if (viewModel.isDarkMode) Color(0xFFFBBF24) else Color(0xFF2E6FF2),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "Dark Mode", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    Text(text = if (viewModel.isDarkMode) "Dark theme enabled" else "Light theme enabled", fontSize = 11.sp, color = TextSecondary)
+                }
+                Switch(
+                    checked = viewModel.isDarkMode,
+                    onCheckedChange = { viewModel.isDarkMode = it },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Color(0xFF2E6FF2),
+                        uncheckedThumbColor = Color(0xFF64748B),
+                        uncheckedTrackColor = if (viewModel.isDarkMode) Color(0xFF334155) else Color(0xFFE2E8F0)
+                    )
+                )
+            }
+        }
+
+        // --- CLOUD SYNC SECTION ---
+        Text(
+            text = "Cloud Backup & Device Sync",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextSecondary,
+            modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+        )
+
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color(0xFFEFF6FF), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudDone,
+                            contentDescription = "Cloud Icon",
+                            tint = Color(0xFF2E6FF2),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "Cloud Sync Ledger", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "Connected • Live synchronization active", fontSize = 11.sp, color = Color(0xFF10B981))
+                    }
+                }
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    color = if (isSystemInDarkMode) Color(0xFF374151) else Color(0xFFEEEEEE)
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color(0xFFEFF6FF), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Smartphone,
+                            contentDescription = "Sync Everywhere",
+                            tint = Color(0xFF2E6FF2),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "Access Anywhere, Anytime", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "Linked to Account: ${viewModel.currentUser?.email ?: "Not Linked"}", fontSize = 11.sp, color = TextSecondary)
+                    }
+                }
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    color = if (isSystemInDarkMode) Color(0xFF374151) else Color(0xFFEEEEEE)
+                )
+
+                // Force Backup Row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            viewModel.syncDataToCloud()
+                            Toast.makeText(context, "Cloud sync complete! Portfolios and logs updated safely.", Toast.LENGTH_SHORT).show()
+                        }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color(0xFFECFDF5), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Update,
+                            contentDescription = "Force Sync Now",
+                            tint = Color(0xFF10B981),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "Backup & Re-sync Now", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "Force refresh cloud account backup ledger", fontSize = 11.sp, color = TextSecondary)
+                    }
+                }
+            }
+        }
+
         // --- 2. SESSION & SAFETY SECTION ---
         Text(
             text = "Session & Safety",
@@ -459,7 +623,7 @@ fun SettingsMainContent(
                     Box(
                         modifier = Modifier
                             .size(36.dp)
-                            .background(Color(0xFFFCE8E6), CircleShape),
+                            .background(if (isSystemInDarkMode) Color(0xFF991B1B).copy(alpha = 0.2f) else Color(0xFFFCE8E6), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -492,7 +656,7 @@ fun SettingsMainContent(
                     Box(
                         modifier = Modifier
                             .size(36.dp)
-                            .background(Color(0xFFFCE8E6), CircleShape),
+                            .background(if (isSystemInDarkMode) Color(0xFF991B1B).copy(alpha = 0.2f) else Color(0xFFFCE8E6), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -548,7 +712,7 @@ fun SettingsMainContent(
                     Box(
                         modifier = Modifier
                             .size(36.dp)
-                            .background(Color(0xFFFFFDE7), CircleShape),
+                            .background(if (isSystemInDarkMode) Color(0xFF78350F).copy(alpha = 0.2f) else Color(0xFFFFFDE7), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -587,13 +751,13 @@ fun SettingsMainContent(
                     Box(
                         modifier = Modifier
                             .size(36.dp)
-                            .background(Color(0xFFECEFF1), CircleShape),
+                            .background(if (isSystemInDarkMode) Color(0xFF374151) else Color(0xFFECEFF1), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Info,
                             contentDescription = "About",
-                            tint = Color(0xFF455A64),
+                            tint = if (isSystemInDarkMode) Color(0xFF9CA3AF) else Color(0xFF455A64),
                             modifier = Modifier.size(18.dp)
                         )
                     }

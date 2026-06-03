@@ -1,6 +1,7 @@
 package com.example.viewmodel
 
 import android.app.Application
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -317,6 +318,8 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
     var manageMessage by mutableStateOf<String?>(null)
 
     var editingTradeId by mutableStateOf<Int?>(null)
+    var showLogTradeDialogInJournal by mutableStateOf(false)
+    var journalSelectedDateEpochMilli by mutableStateOf<Long?>(null)
 
     fun startEditTrade(trade: Trade) {
         editingTradeId = trade.id
@@ -458,6 +461,23 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Cloud Database Synchronization Engine
+    fun syncDataToCloud() {
+        val user = currentUser ?: return
+        viewModelScope.launch {
+            try {
+                // Ensure latest writes are persisted, then replicate structure to the Cloud ledger
+                val portfolios = repository.getAllPortfolios()
+                val trades = repository.getAllTrades()
+                val mistakes = repository.getAllMistakes()
+                com.example.data.CloudSyncManager.saveToCloud(getApplication(), user, portfolios, trades, mistakes)
+                Log.d("TradeViewModel", "Cloud Sync Completed successfully.")
+            } catch (e: Exception) {
+                Log.e("TradeViewModel", "Failed to sync to cloud: ${e.message}", e)
+            }
+        }
+    }
+
     // Actions
     fun handleRegister() {
         authError = null
@@ -486,6 +506,9 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
                 currentScreen = "MAIN"
                 currentMainTab = "DASHBOARD"
                 checkAndCreateDefaultPortfolio()
+                
+                // Instantly sync to simulated cloud server on sign up
+                syncDataToCloud()
             } catch (e: Exception) {
                 authError = "Failed to register: ${e.localizedMessage}"
             }
@@ -494,22 +517,82 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun handleLogin() {
         authError = null
-        if (loginEmailInput.isBlank()) {
+        val email = loginEmailInput.trim()
+        val password = loginPasswordInput
+        
+        if (email.isBlank()) {
             authError = "Email Address cannot be empty."
             return
         }
-        if (loginPasswordInput.isBlank()) {
+        if (password.isBlank()) {
             authError = "Password cannot be empty."
             return
         }
         
         viewModelScope.launch {
-            val user = repository.validateLogin(loginEmailInput.trim(), loginPasswordInput)
+            // 1. Try local validation
+            var user = repository.validateLogin(email, password)
+            
+            // 2. If user not found locally (new device or clean cache), validate with Simulated Cloud Ledger
+            if (user == null) {
+                val cloudData = com.example.data.CloudSyncManager.findInCloud(getApplication(), email)
+                if (cloudData != null && cloudData.user.passwordHash == password) {
+                    try {
+                        // Restore User profile
+                        val restoredUser = repository.registerUser(
+                            email = cloudData.user.email,
+                            passwordHash = cloudData.user.passwordHash,
+                            name = cloudData.user.name,
+                            startingEquity = cloudData.user.totalEquity,
+                            traderAlias = cloudData.user.traderAlias,
+                            country = cloudData.user.country,
+                            primaryInstrument = cloudData.user.primaryInstrument,
+                            currency = cloudData.user.currency
+                        )
+                        
+                        // Restore Portfolios
+                        for (port in cloudData.portfolios) {
+                            repository.insertPortfolio(port.copy(id = 0))
+                        }
+                        
+                        val restoredPortfolios = repository.getAllPortfolios()
+                        val defaultPortId = restoredPortfolios.firstOrNull()?.id ?: 1
+                        
+                        // Restore Trades mapped with correct active portfolios
+                        for (trade in cloudData.trades) {
+                            val originalPortName = cloudData.portfolios.find { p -> p.id == trade.portfolioId }?.name
+                            val resolvedPortId = restoredPortfolios.find { it.name == originalPortName }?.id ?: defaultPortId
+                            repository.insertTrade(trade.copy(id = 0, portfolioId = resolvedPortId))
+                        }
+                        
+                        // Restore Mistakes
+                        for (mistake in cloudData.mistakes) {
+                            repository.insertMistake(mistake.copy(id = 0))
+                        }
+                        
+                        user = restoredUser
+                    } catch (e: Exception) {
+                        Log.e("TradeViewModel", "Error restoring from cloud backup registry", e)
+                        authError = "Error synchronizing restored data: ${e.localizedMessage}"
+                        return@launch
+                    }
+                }
+            }
+            
             if (user != null) {
                 currentUser = user
                 currentScreen = "MAIN"
                 currentMainTab = "DASHBOARD"
-                checkAndCreateDefaultPortfolio()
+                
+                val portfolios = repository.getAllPortfolios()
+                if (portfolios.isNotEmpty()) {
+                    activePortfolio = portfolios.first()
+                } else {
+                    checkAndCreateDefaultPortfolio()
+                }
+                
+                // Synchronize session back to cloud
+                syncDataToCloud()
             } else {
                 authError = "Invalid email or password."
             }
@@ -534,13 +617,18 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         val entry = tradeEntryPrice.toDoubleOrNull() ?: 0.0
-        val exit = tradeExitPrice.toDoubleOrNull() ?: 0.0
+        val exitVal = tradeExitPrice.toDoubleOrNull()
+        if (tradeExitPrice.isNotBlank() && (exitVal == null || exitVal < 0.0)) {
+            manageMessage = "Please enter a valid exit price or leave it blank."
+            return
+        }
+        val exit = exitVal ?: 0.0
         val size = tradeSize.toDoubleOrNull() ?: 1.0
         val profitValue = tradeProfit.toDoubleOrNull() ?: 0.0
         val broker = tradeBrokerage.toDoubleOrNull() ?: 0.0
         
-        if (entry <= 0.0 || exit <= 0.0) {
-            manageMessage = "Please enter valid entry and exit prices."
+        if (entry <= 0.0) {
+            manageMessage = "Please enter a valid entry price."
             return
         }
 
@@ -578,6 +666,7 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
             clearTradeForm()
             
             manageMessage = if (isEditMode) "Trade updated successfully!" else "Trade added successfully!"
+            syncDataToCloud()
         }
     }
 
@@ -591,6 +680,7 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
                 repository.updateUser(updatedUser)
                 currentUser = updatedUser
             }
+            syncDataToCloud()
         }
     }
 
@@ -602,18 +692,21 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
             val m = Mistake(content = content)
             repository.insertMistake(m)
             mistakeInput = ""
+            syncDataToCloud()
         }
     }
 
     fun handleUpdateMistake(mistake: Mistake) {
         viewModelScope.launch {
             repository.updateMistake(mistake)
+            syncDataToCloud()
         }
     }
 
     fun handleDeleteMistake(mistake: Mistake) {
         viewModelScope.launch {
             repository.deleteMistake(mistake)
+            syncDataToCloud()
         }
     }
 
@@ -689,6 +782,7 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
             portfolioDescInput = ""
             
             manageMessage = "Portfolio Account '$name' created successfully!"
+            syncDataToCloud()
         }
     }
 
@@ -728,6 +822,7 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
             portfolioDescInput = ""
             
             manageMessage = "Portfolio Account '$name' updated successfully!"
+            syncDataToCloud()
         }
     }
 
@@ -739,6 +834,7 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
                 activePortfolio = remaining.firstOrNull()
             }
             manageMessage = "Portfolio Account '${portfolio.name}' deleted."
+            syncDataToCloud()
         }
     }
 
@@ -789,6 +885,28 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
         baseCapitalInput = "100.00"
         currencyInput = "USD"
         authError = null
+    }
+
+    fun refreshAllData() {
+        viewModelScope.launch {
+            try {
+                val user = repository.getAnyUser()
+                if (user != null) {
+                    currentUser = user
+                }
+                val portfolios = repository.getAllPortfolios()
+                if (portfolios.isNotEmpty()) {
+                    val curId = activePortfolio?.id
+                    if (curId != null) {
+                        activePortfolio = portfolios.find { it.id == curId } ?: portfolios.first()
+                    } else {
+                        activePortfolio = portfolios.first()
+                    }
+                }
+            } catch (e: Exception) {
+                // ignore
+            }
+        }
     }
 
     fun handleDeleteAccount() {

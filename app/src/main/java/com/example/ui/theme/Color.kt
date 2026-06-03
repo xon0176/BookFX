@@ -1,8 +1,11 @@
 package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 
-var isSystemInDarkMode = false
+var isSystemInDarkMode by mutableStateOf(false)
 
 val DarkBackground: Color
     get() = if (isSystemInDarkMode) Color(0xFF111827) else Color(0xFFF9FAFC)

@@ -29,52 +29,11 @@ import com.example.viewmodel.TradeViewModel
 
 @Composable
 fun CandlestickLogo(modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Left Candlestick (tall, body in middle)
-        androidx.compose.foundation.Canvas(modifier = Modifier.size(width = 8.dp, height = 32.dp)) {
-            val wickWidth = 2.dp.toPx()
-            val wickHeight = size.height
-            val bodyWidth = size.width
-            val bodyHeight = size.height * 0.6f
-            
-            // wick
-            drawRect(
-                color = Primary,
-                topLeft = androidx.compose.ui.geometry.Offset((size.width - wickWidth)/2, 0f),
-                size = androidx.compose.ui.geometry.Size(wickWidth, wickHeight)
-            )
-            // body
-            drawRect(
-                color = Primary,
-                topLeft = androidx.compose.ui.geometry.Offset(0f, (size.height - bodyHeight)/2),
-                size = androidx.compose.ui.geometry.Size(bodyWidth, bodyHeight)
-            )
-        }
-        // Right Candlestick (shorter, body offset upwards)
-        androidx.compose.foundation.Canvas(modifier = Modifier.size(width = 8.dp, height = 32.dp)) {
-            val wickWidth = 2.dp.toPx()
-            val wickHeight = size.height
-            val bodyWidth = size.width
-            val bodyHeight = size.height * 0.5f
-            
-            // wick
-            drawRect(
-                color = Primary,
-                topLeft = androidx.compose.ui.geometry.Offset((size.width - wickWidth)/2, 0f),
-                size = androidx.compose.ui.geometry.Size(wickWidth, wickHeight)
-            )
-            // body offset
-            drawRect(
-                color = Primary,
-                topLeft = androidx.compose.ui.geometry.Offset(0f, (size.height - bodyHeight)/3),
-                size = androidx.compose.ui.geometry.Size(bodyWidth, bodyHeight)
-            )
-        }
-    }
+    androidx.compose.foundation.Image(
+        painter = androidx.compose.ui.res.painterResource(id = com.example.R.drawable.ic_bookfx_logo),
+        contentDescription = "BookFx Logo",
+        modifier = modifier
+    )
 }
 
 @Composable
@@ -163,8 +122,7 @@ fun OnboardingScreen(viewModel: TradeViewModel, modifier: Modifier = Modifier) {
             // Display proper Icon based on Onboarding step to match specs exactly
             when (viewModel.onboardingStep) {
                 1 -> {
-                    // Logo representation
-                    CandlestickLogo(modifier = Modifier.size(width = 24.dp, height = 32.dp))
+                    // Do not render any logo as requested by the user
                 }
                 2 -> {
                     // Blue Profile Outline Icon
@@ -186,7 +144,11 @@ fun OnboardingScreen(viewModel: TradeViewModel, modifier: Modifier = Modifier) {
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            if (viewModel.onboardingStep != 1) {
+                Spacer(modifier = Modifier.height(24.dp))
+            } else {
+                Spacer(modifier = Modifier.height(12.dp))
+            }
 
             // Step Titles & Subtitles matching image mockups
             val stepTitle = when (viewModel.onboardingStep) {

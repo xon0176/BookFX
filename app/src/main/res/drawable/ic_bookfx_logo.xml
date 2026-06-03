@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="100dp"
+    android:height="100dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+
+    <!-- Minimalist Trading Chart Bars (Modern, clean, flat system style) -->
+    <!-- Bar 1 (Left): Soft translucent white -->
+    <path
+        android:fillColor="#40FFFFFF"
+        android:pathData="M 28,52 C 28,51 29,50 30,50 L 38,50 C 39,50 40,51 40,52 L 40,73 C 40,74 39,75 38,75 L 30,75 C 29,75 28,74 28,73 Z" />
+
+    <!-- Bar 2 (Middle): Medium translucent white -->
+    <path
+        android:fillColor="#80FFFFFF"
+        android:pathData="M 44,38 C 44,37 45,36 46,36 L 54,36 C 55,36 56,37 56,38 L 56,73 C 56,74 55,75 54,75 L 46,75 C 45,75 44,74 44,73 Z" />
+
+    <!-- Bar 3 (Right): Fully opaque white -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M 60,24 C 60,23 61,22 62,22 L 70,22 C 71,22 72,23 72,24 L 72,73 C 72,74 71,75 70,75 L 62,75 C 61,75 60,74 60,73 Z" />
+
+
+
+</vector>

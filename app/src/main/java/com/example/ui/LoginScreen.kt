@@ -64,11 +64,6 @@ fun LoginScreen(viewModel: TradeViewModel, modifier: Modifier = Modifier) {
             
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Candlestick logo
-            CandlestickLogo(modifier = Modifier.size(width = 24.dp, height = 32.dp))
-
-            Spacer(modifier = Modifier.height(24.dp))
-
             // Title
             Text(
                 text = "Welcome Back",

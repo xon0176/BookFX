@@ -32,6 +32,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
+import androidx.compose.animation.core.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.example.data.*
 import com.example.ui.*
 import com.example.ui.theme.*
@@ -62,11 +72,21 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    when (viewModel.currentScreen) {
-                        "ONBOARDING" -> OnboardingScreen(viewModel = viewModel)
-                        "LOGIN" -> LoginScreen(viewModel = viewModel)
-                        "MAIN" -> MainPortal(viewModel = viewModel)
-                        else -> OnboardingScreen(viewModel = viewModel)
+                    AnimatedContent(
+                        targetState = viewModel.currentScreen,
+                        transitionSpec = {
+                            fadeIn(animationSpec = tween(400, easing = EaseInOutCubic)) + 
+                            slideInVertically(animationSpec = tween(400, easing = EaseInOutCubic), initialOffsetY = { it / 8 }) togetherWith
+                            fadeOut(animationSpec = tween(200, easing = EaseInOutCubic))
+                        },
+                        label = "ScreenSwitch"
+                    ) { targetScreen ->
+                        when (targetScreen) {
+                            "ONBOARDING" -> OnboardingScreen(viewModel = viewModel)
+                            "LOGIN" -> LoginScreen(viewModel = viewModel)
+                            "MAIN" -> MainPortal(viewModel = viewModel)
+                            else -> OnboardingScreen(viewModel = viewModel)
+                        }
                     }
                 }
             }
@@ -220,33 +240,44 @@ fun MainPortal(viewModel: TradeViewModel) {
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Tab-based navigation contents
-            when (viewModel.currentMainTab) {
-                "DASHBOARD" -> {
-                    DashboardWidgets(
-                        activeEquity = activeEquityVal,
-                        plDifference = plDifference,
-                        plPercent = plPercent,
-                        trades = filteredTrades,
-                        totalProfit = totalProfitPrice,
-                        totalBrokerage = totalBrokerageFee,
-                        activePortfolio = viewModel.activePortfolio,
-                        mistakes = mistakes,
-                        mistakeInput = viewModel.mistakeInput,
-                        onMistakeInputChange = { viewModel.mistakeInput = it },
-                        onAddMistake = { viewModel.handleAddMistake() },
-                        onUpdateMistake = { viewModel.handleUpdateMistake(it) },
-                        onDeleteMistake = { viewModel.handleDeleteMistake(it) },
-                        onNavigate = { viewModel.currentMainTab = it },
-                        onDeleteTrade = { viewModel.handleDeleteTrade(it) },
-                        viewModel = viewModel
-                    )
+            // Tab-based navigation contents with smooth transitions
+            AnimatedContent(
+                targetState = viewModel.currentMainTab,
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(280, easing = EaseInOutCubic)) + 
+                    slideInVertically(animationSpec = tween(280, easing = EaseInOutCubic), initialOffsetY = { it / 14 }) togetherWith
+                    fadeOut(animationSpec = tween(140, easing = EaseInOutCubic))
+                },
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                label = "MainTabSwitch"
+            ) { targetTab ->
+                when (targetTab) {
+                    "DASHBOARD" -> {
+                        DashboardWidgets(
+                            activeEquity = activeEquityVal,
+                            plDifference = plDifference,
+                            plPercent = plPercent,
+                            trades = filteredTrades,
+                            totalProfit = totalProfitPrice,
+                            totalBrokerage = totalBrokerageFee,
+                            activePortfolio = viewModel.activePortfolio,
+                            mistakes = mistakes,
+                            mistakeInput = viewModel.mistakeInput,
+                            onMistakeInputChange = { viewModel.mistakeInput = it },
+                            onAddMistake = { viewModel.handleAddMistake() },
+                            onUpdateMistake = { viewModel.handleUpdateMistake(it) },
+                            onDeleteMistake = { viewModel.handleDeleteMistake(it) },
+                            onNavigate = { viewModel.currentMainTab = it },
+                            onDeleteTrade = { viewModel.handleDeleteTrade(it) },
+                            viewModel = viewModel
+                        )
+                    }
+                    "MANAGE" -> ManageScreen(viewModel = viewModel)
+                    "JOURNAL" -> JournalScreen(viewModel = viewModel)
+                    "ANALYTICS" -> AnalyticsScreen(viewModel = viewModel)
+                    "SETTINGS" -> SettingsScreen(viewModel = viewModel)
+                    "NOTES" -> NotesScreen(viewModel = viewModel)
                 }
-                "MANAGE" -> ManageScreen(viewModel = viewModel)
-                "JOURNAL" -> JournalScreen(viewModel = viewModel)
-                "ANALYTICS" -> AnalyticsScreen(viewModel = viewModel)
-                "SETTINGS" -> SettingsScreen(viewModel = viewModel)
-                "NOTES" -> NotesScreen(viewModel = viewModel)
             }
         }
     }
@@ -469,7 +500,82 @@ fun DashboardWidgets(
     }
     val topHighlightsToShow = if (orderedHighlights.isNotEmpty()) orderedHighlights.take(3) else allOptions.take(3)
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    // Pull-to-refresh states
+    var pullDelta by remember { mutableStateOf(0f) }
+    var isRefreshing by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+
+    val maxPullOffset = 320f
+    val dragResistance = 0.5f
+
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (isRefreshing) return Offset.Zero
+                // If user is pulling up, reduce the pull offset first before scrolling
+                if (available.y < 0 && pullDelta > 0) {
+                    val prev = pullDelta
+                    pullDelta = Math.max(0f, pullDelta + available.y)
+                    return Offset(0f, pullDelta - prev)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                if (isRefreshing) return Offset.Zero
+                // Pulling down at the top of scroll
+                if (available.y > 0 && scrollState.value == 0) {
+                    pullDelta = Math.min(maxPullOffset, pullDelta + available.y * dragResistance)
+                    return Offset(0f, available.y)
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (isRefreshing) return Velocity.Zero
+                if (pullDelta >= 170f) {
+                    isRefreshing = true
+                    pullDelta = 170f
+                    coroutineScope.launch {
+                        // Refresh all VM stats and trigger reload
+                        viewModel.refreshAllData()
+                        delay(1200) // Visual rotation for a beautiful, satisfying re-sync response
+                        isRefreshing = false
+                        pullDelta = 0f
+                    }
+                } else {
+                    pullDelta = 0f
+                }
+                return Velocity.Zero
+            }
+        }
+    }
+
+    val animatedOffset by animateFloatAsState(
+        targetValue = pullDelta,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+    )
+
+    val infiniteTransition = rememberInfiniteTransition(label = "RefreshRotation")
+    val rotationAngle by if (isRefreshing) {
+        infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1000, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "Rotation"
+        )
+    } else {
+        remember(pullDelta) { mutableStateOf(pullDelta * 2f) }
+    }
+
+    Box(modifier = Modifier.fillMaxSize().nestedScroll(nestedScrollConnection)) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -499,7 +605,7 @@ fun DashboardWidgets(
                         modifier = Modifier.alignByBaseline()
                     )
                     Text(
-                        text = String.format(java.util.Locale.US, "%.2f", activeEquity), 
+                        text = String.format(java.util.Locale.US, "%,.2f", activeEquity), 
                         fontSize = 40.sp, 
                         color = TextPrimary,
                         fontWeight = FontWeight.Bold,
@@ -521,11 +627,112 @@ fun DashboardWidgets(
                         .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = "${if (isProfit) "↑" else "↓"} $prefix$${String.format(java.util.Locale.US, "%.2f", plDifference)} (${String.format(java.util.Locale.US, "%.1f", plPercent)}%)",
+                        text = "${if (isProfit) "↑" else "↓"} $prefix$${String.format(java.util.Locale.US, "%,.2f", plDifference)} (${String.format(java.util.Locale.US, "%.1f", plPercent)}%)",
                         color = chipColor,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Beautiful curved inline line graph directly below the chip
+                val baseCapital = activePortfolio?.startingEquity ?: 10000.0
+                val orderedTrades = remember(trades) { trades.sortedBy { it.timestamp } }
+                val equityNodes = remember(orderedTrades, baseCapital) {
+                    val list = mutableListOf<Double>()
+                    var currentEq = baseCapital
+                    list.add(currentEq)
+                    for (t in orderedTrades) {
+                        currentEq += (t.profit - t.brokerage)
+                        list.add(currentEq)
+                    }
+                    list
+                }
+
+                val minEq = equityNodes.minOrNull() ?: baseCapital
+                val maxEq = equityNodes.maxOrNull() ?: baseCapital
+                val range = if (maxEq - minEq > 0) maxEq - minEq else 100.0
+                val isPositiveTrend = plDifference >= 0.0
+                val curveColor = if (isPositiveTrend) Color(0xFF10B981) else Color(0xFFEF4444)
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(130.dp)
+                ) {
+                    androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                        val width = size.width
+                        val height = size.height
+                        val pointsCount = equityNodes.size
+
+                        if (pointsCount > 1) {
+                            val xStep = width / (pointsCount - 1)
+                            val path = androidx.compose.ui.graphics.Path()
+                            val fillPath = androidx.compose.ui.graphics.Path()
+
+                            val firstEq = equityNodes[0]
+                            val firstNormalizedY = ((firstEq - minEq) / range)
+                            val firstY = height - (firstNormalizedY.toFloat() * height)
+                            path.moveTo(0f, firstY)
+                            fillPath.moveTo(0f, height)
+                            fillPath.lineTo(0f, firstY)
+
+                            var prevX = 0f
+                            var prevY = firstY
+
+                            for (i in 1 until pointsCount) {
+                                val eq = equityNodes[i]
+                                val x = i * xStep
+                                val normalizedY = ((eq - minEq) / range)
+                                val y = height - (normalizedY.toFloat() * height)
+
+                                val controlX1 = prevX + (x - prevX) / 2f
+                                val controlY1 = prevY
+                                val controlX2 = prevX + (x - prevX) / 2f
+                                val controlY2 = y
+
+                                path.cubicTo(controlX1, controlY1, controlX2, controlY2, x, y)
+                                fillPath.cubicTo(controlX1, controlY1, controlX2, controlY2, x, y)
+
+                                prevX = x
+                                prevY = y
+                            }
+                            fillPath.lineTo(prevX, height)
+                            fillPath.close()
+
+                            drawPath(
+                                path = fillPath,
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(
+                                        curveColor.copy(alpha = 0.15f),
+                                        curveColor.copy(alpha = 0.00f)
+                                    ),
+                                    startY = 0f,
+                                    endY = height
+                                )
+                            )
+
+                            drawPath(
+                                path = path,
+                                color = curveColor,
+                                style = androidx.compose.ui.graphics.drawscope.Stroke(
+                                    width = 3.dp.toPx(),
+                                    cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                                    join = androidx.compose.ui.graphics.StrokeJoin.Round
+                                )
+                            )
+                        } else {
+                            // If no trades (just 1 baseline point), draw a clean middle horizontal line
+                            drawLine(
+                                color = TextSecondary.copy(alpha = 0.3f),
+                                start = Offset(0f, height / 2f),
+                                end = Offset(width, height / 2f),
+                                strokeWidth = 2.dp.toPx(),
+                                pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+                            )
+                        }
+                    }
                 }
             }
 
@@ -655,9 +862,23 @@ fun DashboardWidgets(
                         val badgeBg = if (trade.isBuy) Color(0xFFE6F4EA) else Color(0xFFFCE8E6)
                         val badgeColor = if (trade.isBuy) Color(0xFF137333) else Color(0xFFC5221F)
                         val plColor = if (isProfit) Color(0xFF10B981) else Color(0xFFEF4444)
+                        val formattedDate = remember(trade.timestamp) {
+                            try {
+                                java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.US).format(java.util.Date(trade.timestamp))
+                            } catch (e: Exception) {
+                                ""
+                            }
+                        }
                         
                         Card(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.journalSelectedDateEpochMilli = trade.timestamp
+                                    viewModel.startEditTrade(trade)
+                                    viewModel.showLogTradeDialogInJournal = true
+                                    viewModel.currentMainTab = "JOURNAL"
+                                },
                             colors = CardDefaults.cardColors(containerColor = DarkSurface),
                             shape = RoundedCornerShape(14.dp),
                             border = androidx.compose.foundation.BorderStroke(1.dp, if (isSystemInDarkMode) Color(0xFF1E293B) else Color(0xFFF1F3F9))
@@ -718,7 +939,7 @@ fun DashboardWidgets(
                                             }
                                         }
                                         Text(
-                                            text = "Size: ${trade.size} lot | Entry: ${trade.entryPrice}",
+                                            text = "Date: $formattedDate",
                                             fontSize = 12.sp,
                                             color = TextSecondary
                                         )
@@ -770,7 +991,7 @@ fun DashboardWidgets(
                         .fillMaxWidth()
                         .align(Alignment.BottomCenter)
                         .clickable(enabled = false) {},
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(containerColor = DarkSurface),
                     shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
                     elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
                 ) {
@@ -914,6 +1135,38 @@ fun DashboardWidgets(
                 }
             }
         }
+
+        if (animatedOffset > 10f || isRefreshing) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .offset(y = (-30 + animatedOffset / 3f).dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .shadow(elevation = 6.dp, shape = CircleShape)
+                        .background(if (isSystemInDarkMode) Color(0xFF1E293B) else Color.White, CircleShape)
+                        .border(
+                            width = 1.dp,
+                            color = if (isSystemInDarkMode) Color(0xFF334155) else Color(0xFFE2E8F0),
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refreshing",
+                        tint = Color(0xFF2E6FF2),
+                        modifier = Modifier
+                            .size(24.dp)
+                            .rotate(rotationAngle)
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -959,9 +1212,9 @@ fun HighlightStatCard(
 ) {
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = DarkSurface),
         shape = RoundedCornerShape(16.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF1F3F9))
+        border = androidx.compose.foundation.BorderStroke(1.dp, if (isSystemInDarkMode) Color(0xFF1E293B) else Color(0xFFF1F3F9))
     ) {
         Column(
             modifier = Modifier
@@ -1088,7 +1341,8 @@ fun LightTradeJournalCard(trade: Trade, onDelete: () -> Unit) {
                         }
                         Column {
                             Text("Exit Price", fontSize = 11.sp, color = TextSecondary)
-                            Text("$${String.format("%.4f", trade.exitPrice)}", fontSize = 14.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
+                            val exitText = if (trade.exitPrice == 0.0) "N/A" else "$${String.format("%.4f", trade.exitPrice)}"
+                            Text(exitText, fontSize = 14.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
                         }
                         Column {
                             Text("Fees / Broker", fontSize = 11.sp, color = TextSecondary)
@@ -1232,6 +1486,8 @@ fun NotesScreen(viewModel: TradeViewModel) {
         )
     }
 
+    var showConfirmClear by remember { mutableStateOf(false) }
+
     // Sync with viewModel when empty or missing prefix to ensure valid start
     LaunchedEffect(Unit) {
         val rawText = viewModel.simpleNotesText
@@ -1240,6 +1496,31 @@ fun NotesScreen(viewModel: TradeViewModel) {
             viewModel.updateSimpleNotes(correctStart)
             notesValue = TextFieldValue(correctStart, TextRange(correctStart.length))
         }
+    }
+
+    if (showConfirmClear) {
+        AlertDialog(
+            onDismissRequest = { showConfirmClear = false },
+            title = { Text("Clear Notes?", fontWeight = FontWeight.Bold, color = TextPrimary) },
+            text = { Text("This will delete all content from your Notes. This action cannot be undone.", fontSize = 14.sp, color = TextSecondary) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showConfirmClear = false
+                        notesValue = TextFieldValue("• ", TextRange(2))
+                        viewModel.updateSimpleNotes("• ")
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
+                ) {
+                    Text("Clear", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmClear = false }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            }
+        )
     }
 
     Column(
@@ -1301,36 +1582,42 @@ fun NotesScreen(viewModel: TradeViewModel) {
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(
+            onClick = { showConfirmClear = true },
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFFEF4444).copy(alpha = 0.1f),
+                contentColor = Color(0xFFEF4444)
+            ),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = "Clear Notes",
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(text = "Clear Notes", fontWeight = FontWeight.Bold)
+        }
     }
 }
 
 fun keepSelectionOutOfPrefixes(text: String, selection: TextRange): TextRange {
     try {
-        val lines = text.split("\n")
-        var currentPos = 0
         var start = selection.start
         var end = selection.end
-
-        for (i in lines.indices) {
-            val line = lines[i]
-            val lineLen = line.length
-            val lineEnd = currentPos + lineLen
-
-            if (line.startsWith("• ")) {
-                val prefixStart = currentPos
-                val prefixEnd = currentPos + 2 // right after "• "
-
-                if (start in prefixStart until prefixEnd) {
-                    start = prefixEnd
-                }
-                if (end in prefixStart until prefixEnd) {
-                    end = prefixEnd
-                }
+        
+        // Only protect the "• " prefix on the absolute first line (0..1 indices)
+        if (text.startsWith("• ")) {
+            if (start in 0..1) {
+                start = 2
             }
-
-            currentPos = lineEnd + 1
+            if (end in 0..1) {
+                end = 2
+            }
         }
-
         return TextRange(start.coerceIn(0, text.length), end.coerceIn(0, text.length))
     } catch (e: Exception) {
         return selection
@@ -1340,15 +1627,27 @@ fun keepSelectionOutOfPrefixes(text: String, selection: TextRange): TextRange {
 fun adjustNotesValue(oldVal: TextFieldValue, newVal: TextFieldValue): TextFieldValue {
     try {
         val oldText = oldVal.text
-        val newText = newVal.text
+        var newText = newVal.text
 
-        // If selection changed but text is the same, just adjust selection out of protected prefixes
+        // Ensure the entire text is not completely empty, and always begins with "• "
+        if (newText.isEmpty()) {
+            newText = "• "
+        } else if (!newText.startsWith("• ")) {
+            if (newText.startsWith("•")) {
+                newText = "• " + newText.removePrefix("•")
+            } else {
+                newText = "• " + newText
+            }
+        }
+
+        // If selection changed but text is the same, adjust selection out of first line bullet
         if (oldText == newText) {
             val adjustedSelection = keepSelectionOutOfPrefixes(newText, newVal.selection)
             return newVal.copy(selection = adjustedSelection)
         }
 
-        // Newline inserted handler
+        // Auto-bullets helper: If user presses enter and inserts a newline, 
+        // we can add a helper bullet point "• " on the new line, which can be freely deleted.
         if (newText.length > oldText.length) {
             val addedCount = newText.length - oldText.length
             val selectionStart = newVal.selection.start.coerceIn(0, newText.length)
@@ -1366,45 +1665,20 @@ fun adjustNotesValue(oldVal: TextFieldValue, newVal: TextFieldValue): TextFieldV
             }
         }
 
-        val newLines = newText.split("\n")
-        val finalLines = mutableListOf<String>()
-
-        for (i in newLines.indices) {
-            val line = newLines[i]
-            val trimmed = line.trim()
-            if (trimmed.isEmpty() || trimmed == "•") {
-                finalLines.add("• ")
-            } else {
-                if (line.startsWith("• ")) {
-                    finalLines.add(line)
-                } else {
-                    val content = if (line.startsWith("•") && line.length > 1) {
-                        line.substring(1)
-                    } else if (line == "•") {
-                        ""
-                    } else {
-                        line
-                    }
-                    finalLines.add("• " + content.trimStart())
-                }
-            }
-        }
-
-        val finalText = finalLines.joinToString("\n")
+        // Keep selection in range
         var newSelection = newVal.selection
-
-        if (finalText != newText) {
-            val diff = finalText.length - newText.length
+        if (newText != newVal.text) {
+            val diff = newText.length - newVal.text.length
             val originalStart = newVal.selection.start
-            if (originalStart >= newText.length) {
-                newSelection = TextRange(finalText.length)
+            if (originalStart >= newVal.text.length) {
+                newSelection = TextRange(newText.length)
             } else {
-                newSelection = TextRange((originalStart + diff).coerceIn(0, finalText.length))
+                newSelection = TextRange((originalStart + diff).coerceIn(0, newText.length))
             }
         }
 
-        val finalSelection = keepSelectionOutOfPrefixes(finalText, newSelection)
-        return newVal.copy(text = finalText, selection = finalSelection)
+        val finalSelection = keepSelectionOutOfPrefixes(newText, newSelection)
+        return newVal.copy(text = newText, selection = finalSelection)
     } catch (e: Exception) {
         android.util.Log.e("NotesScreen", "Error during adjustNotesValue", e)
         return newVal

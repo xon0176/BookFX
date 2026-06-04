@@ -573,7 +573,8 @@ fun SettingsMainContent(
                                 if (success) {
                                     Toast.makeText(context, "Cloud sync complete! Portfolios and logs updated safely.", Toast.LENGTH_LONG).show()
                                 } else {
-                                    Toast.makeText(context, "Cloud sync failed. Please check your internet connection.", Toast.LENGTH_LONG).show()
+                                    val detailedErr = com.example.data.CloudSyncManager.lastError ?: "No internet connection"
+                                    Toast.makeText(context, "Cloud sync failed: $detailedErr", Toast.LENGTH_LONG).show()
                                 }
                             }
                         }

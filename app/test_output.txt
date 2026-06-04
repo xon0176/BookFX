@@ -1,0 +1,3 @@
+TEST_STARTED
+Test PUT on stable bucket response Code: 404
+Test PUT Error: bucket id invalid

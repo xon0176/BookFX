@@ -18,11 +18,15 @@ data class CloudBackupData(
 )
 
 object CloudSyncManager {
-    private const val BUCKET_ID = "J78WBJDLZYLE37UtFDvyLm"
+    private const val BUCKET_ID = "L4f3GGBK1bgW7nVjFNaZAq"
     private const val BASE_URL = "https://kvdb.io/$BUCKET_ID/"
     
     // Fallback SharedPreferences database in case the device is offline or kvdb is unreachable
     private const val PREFS_NAME = "bookfx_cloud_sync_ledger"
+    
+    @Volatile
+    var lastError: String? = null
+        private set
     
     private val moshi = Moshi.Builder()
         .addLast(KotlinJsonAdapterFactory())
@@ -72,9 +76,11 @@ object CloudSyncManager {
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "PUT"
             conn.doOutput = true
-            conn.connectTimeout = 8000
-            conn.readTimeout = 8000
+            conn.connectTimeout = 15000
+            conn.readTimeout = 15000
             conn.setRequestProperty("Content-Type", "application/json")
+            conn.setRequestProperty("Accept", "application/json")
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
             
             val out = conn.outputStream
             out.write(json.toByteArray(Charsets.UTF_8))
@@ -84,10 +90,14 @@ object CloudSyncManager {
             if (responseCode in 200..299) {
                 Log.d("CloudSyncManager", "Successfully backed up data to KVdb cloud ledger for: ${user.email}")
                 isSuccess = true
+                lastError = null
             } else {
+                val errorMsg = "HTTP $responseCode: ${conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "Empty error response"}"
+                lastError = errorMsg
                 Log.e("CloudSyncManager", "Network returned non-success response code: $responseCode when uploading sync ledger")
             }
         } catch (e: Exception) {
+            lastError = e.toString()
             Log.e("CloudSyncManager", "Error backing up to KVdb cloud over network", e)
         }
         return@withContext isSuccess
@@ -104,8 +114,10 @@ object CloudSyncManager {
             val url = URL("$BASE_URL$emailKey")
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
-            conn.connectTimeout = 8000
-            conn.readTimeout = 8000
+            conn.connectTimeout = 15000
+            conn.readTimeout = 15000
+            conn.setRequestProperty("Accept", "application/json")
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
             
             val responseCode = conn.responseCode
             if (responseCode == 200) {

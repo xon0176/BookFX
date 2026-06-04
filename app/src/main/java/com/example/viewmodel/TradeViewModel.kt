@@ -500,6 +500,8 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 currentScreen = "MAIN"
                 currentMainTab = "DASHBOARD"
+                // On app startup, let's do a bidirectional merge to get the latest cloud changes!
+                syncDataToCloud(pullAndMerge = true)
             } else {
                 currentScreen = "ONBOARDING"
             }
@@ -507,23 +509,112 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Cloud Database Synchronization Engine
-    fun syncDataToCloud(onResult: ((Boolean) -> Unit)? = null) {
+    fun syncDataToCloud(pullAndMerge: Boolean = false, onResult: ((Boolean) -> Unit)? = null) {
         val user = currentUser ?: return
         viewModelScope.launch {
             try {
-                // Ensure latest writes are persisted, then replicate structure to the Cloud ledger
-                val portfolios = repository.getAllPortfolios()
-                val trades = repository.getAllTrades()
-                val mistakes = repository.getAllMistakes()
-                val success = com.example.data.CloudSyncManager.saveToCloud(getApplication(), user, portfolios, trades, mistakes)
+                if (pullAndMerge) {
+                    // 1. Pull the latest backups from the cloud
+                    val cloudData = com.example.data.CloudSyncManager.findInCloud(getApplication(), user.email)
+                    
+                    if (cloudData != null) {
+                        // Let's do a bidirectional merge of Portfolios, Trades, Mistakes and User properties!
+                        
+                        // A. Merge Portfolios
+                        val localPortfolios = repository.getAllPortfolios()
+                        for (cloudPort in cloudData.portfolios) {
+                            val matchingLocal = localPortfolios.find { it.name.lowercase().trim() == cloudPort.name.lowercase().trim() }
+                            if (matchingLocal == null) {
+                                // Portfolio is in cloud but not local, insert it locally
+                                repository.insertPortfolio(cloudPort.copy(id = 0))
+                            } else {
+                                // Same portfolio exists. Let's merge startingEquity if different
+                                if (matchingLocal.startingEquity != cloudPort.startingEquity) {
+                                    // Keep the non-100 or non-default values, or let the cloud override local default
+                                    if (matchingLocal.startingEquity == 100.0 && cloudPort.startingEquity != 100.0) {
+                                        repository.updatePortfolio(matchingLocal.copy(startingEquity = cloudPort.startingEquity, broker = cloudPort.broker, type = cloudPort.type, description = cloudPort.description))
+                                    } else if (cloudPort.startingEquity != 100.0 && cloudPort.startingEquity > matchingLocal.startingEquity) {
+                                        repository.updatePortfolio(matchingLocal.copy(startingEquity = cloudPort.startingEquity))
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Fetch updated local portfolios to get valid local IDs
+                        val updatedLocalPortfolios = repository.getAllPortfolios()
+                        val defaultPortId = updatedLocalPortfolios.firstOrNull()?.id ?: 1
+                        
+                        // B. Merge Trades
+                        val localTrades = repository.getAllTrades()
+                        for (cloudTrade in cloudData.trades) {
+                            val matchingLocalTrade = localTrades.find { 
+                                it.timestamp == cloudTrade.timestamp && 
+                                it.symbol.lowercase().trim() == cloudTrade.symbol.lowercase().trim() && 
+                                Math.abs(it.profit - cloudTrade.profit) < 0.01 
+                            }
+                            if (matchingLocalTrade == null) {
+                                val originalPortName = cloudData.portfolios.find { p -> p.id == cloudTrade.portfolioId }?.name
+                                val resolvedPortId = if (originalPortName != null) {
+                                    updatedLocalPortfolios.find { it.name.lowercase().trim() == originalPortName.lowercase().trim() }?.id ?: defaultPortId
+                                } else {
+                                    defaultPortId
+                                }
+                                repository.insertTrade(cloudTrade.copy(id = 0, portfolioId = resolvedPortId))
+                            }
+                        }
+                        
+                        // C. Merge Mistakes
+                        val localMistakes = repository.getAllMistakes()
+                        for (cloudMistake in cloudData.mistakes) {
+                            val matchingLocalMistake = localMistakes.find { 
+                                it.timestamp == cloudMistake.timestamp && 
+                                it.content.lowercase().trim() == cloudMistake.content.lowercase().trim() 
+                            }
+                            if (matchingLocalMistake == null) {
+                                repository.insertMistake(cloudMistake.copy(id = 0))
+                            }
+                        }
+                        
+                        // D. Merge User profile
+                        val localUser = repository.getAnyUser()
+                        if (localUser != null) {
+                            val differentEquity = localUser.totalEquity != cloudData.user.totalEquity
+                            if (differentEquity) {
+                                val cloudEquity = cloudData.user.totalEquity
+                                val updatedUser = localUser.copy(totalEquity = cloudEquity)
+                                repository.updateUser(updatedUser)
+                                currentUser = updatedUser
+                            }
+                        }
+                    }
+                }
+                
+                // 2. Fetch the latest fully merged datasets from the local database
+                val mergedUser = repository.getAnyUser() ?: user
+                val mergedPortfolios = repository.getAllPortfolios()
+                val mergedTrades = repository.getAllTrades()
+                val mergedMistakes = repository.getAllMistakes()
+                
+                // Keep the active portfolio pointer clean and matching local
+                if (activePortfolio != null) {
+                    val matchingActive = mergedPortfolios.find { it.name.lowercase().trim() == activePortfolio?.name?.lowercase()?.trim() }
+                    if (matchingActive != null) {
+                        activePortfolio = matchingActive
+                    }
+                } else if (mergedPortfolios.isNotEmpty()) {
+                    activePortfolio = mergedPortfolios.first()
+                }
+                
+                // 3. Save the complete merged state back to the cloud
+                val success = com.example.data.CloudSyncManager.saveToCloud(getApplication(), mergedUser, mergedPortfolios, mergedTrades, mergedMistakes)
                 if (success) {
-                    Log.d("TradeViewModel", "Cloud Sync Completed successfully.")
+                    Log.d("TradeViewModel", "Cloud Sync Completed successfully (pullAndMerge=$pullAndMerge).")
                 } else {
-                    Log.e("TradeViewModel", "Cloud Sync failed to upload to remote host.")
+                    Log.e("TradeViewModel", "Cloud Sync failed to upload merged registry state.")
                 }
                 onResult?.invoke(success)
             } catch (e: Exception) {
-                Log.e("TradeViewModel", "Failed to sync to cloud: ${e.message}", e)
+                Log.e("TradeViewModel", "Failed to sync with cloud: ${e.message}", e)
                 onResult?.invoke(false)
             }
         }
@@ -581,14 +672,19 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
         }
         
         viewModelScope.launch {
-            // 1. Try local validation
-            var user = repository.validateLogin(email, password)
+            // Find remote account in cloud first to see if there is an authoritative backup
+            val cloudData = com.example.data.CloudSyncManager.findInCloud(getApplication(), email)
+            var user: User? = null
             
-            // 2. If user not found locally (new device or clean cache), validate with Simulated Cloud Ledger
-            if (user == null) {
-                val cloudData = com.example.data.CloudSyncManager.findInCloud(getApplication(), email)
-                if (cloudData != null && cloudData.user.passwordHash == password) {
+            if (cloudData != null) {
+                if (cloudData.user.passwordHash == password) {
                     try {
+                        // Clear any existing local tables before restoring cloud backup
+                        repository.clearUsers()
+                        repository.clearPortfolios()
+                        repository.clearTrades()
+                        repository.clearMistakes()
+                        
                         // Restore User profile
                         val restoredUser = repository.registerUser(
                             email = cloudData.user.email,
@@ -627,7 +723,13 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
                         authError = "Error synchronizing restored data: ${e.localizedMessage}"
                         return@launch
                     }
+                } else {
+                    authError = "Invalid email or password."
+                    return@launch
                 }
+            } else {
+                // If cloud data is not found (offline or never synced), validate locally
+                user = repository.validateLogin(email, password)
             }
             
             if (user != null) {
@@ -642,7 +744,7 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
                     checkAndCreateDefaultPortfolio()
                 }
                 
-                // Synchronize session back to cloud
+                // Synchronize session back to cloud to establish local/remote alignment
                 syncDataToCloud()
             } else {
                 authError = "Invalid email or password."
@@ -921,6 +1023,19 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun handleLogout() {
+        viewModelScope.launch {
+            try {
+                repository.clearTrades()
+                repository.clearPortfolios()
+                repository.clearMistakes()
+                repository.clearUsers()
+                activePortfolio = null
+                Log.d("TradeViewModel", "Successfully cleared local SQLite database tables on logout")
+            } catch (e: Exception) {
+                Log.e("TradeViewModel", "Error clearing local database on logout", e)
+            }
+        }
+        
         currentUser = null
         currentScreen = "ONBOARDING"
         onboardingStep = 1

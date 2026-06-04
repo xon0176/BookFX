@@ -1,0 +1,596 @@
+TEST_STARTED
+1. Fetching available domains from mail.tm...
+Domains endpoint response code: 200
+Selected Domain: wshu.net
+Generated email address: kvdbverifywskchxhx@wshu.net
+2. Creating account on mail.tm...
+Account creation response code: 201
+3. Authenticating and getting JWT token...
+Token response code: 200
+Successfully retrieved auth bearer token!
+4. Requesting new bucket from KVdb...
+Create bucket response code: 201
+Assigned KVdb Bucket ID: L4f3GGBK1bgW7nVjFNaZAq
+5. Waiting and polling mail.tm inbox for verification email...
+Poll attempt 1...
+Inbox messages count / check: 884 bytes
+Found email! Reading message ID: 6a2130605985f4ecdbff9058
+Email body length: 22120
+Extracted activation link successfully: https://kvdb.io/login?token=AWohMrcCYWRtaW46dG9rZW5zOmVtYWlsOmt2ZGJ2ZXJpZnl3c2tjaHhoeEB3c2h1Lm5ldA.Giwh6WU-NeJrOeS_2ZArkq4SLrMw_j8ODmzswVDMuws
+6. Activating bucket via GET request...
+Activation endpoint response: 200
+Response body: <!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>KVdb - Key-Value Store as a Service API for Serverless Apps</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description" content="KVdb is a simple key-value data store as a service for serverless apps, prototyping, metrics, and IoT. Provides a REST API that can be used from any language.">
+
+        <link rel="canonical" href="https://kvdb.io/" />
+
+        <meta property="og:image" content="https://kvdb.io/assets/iot.png" />
+
+        <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon/apple-touch-icon.png">
+        <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon/favicon-32x32.png">
+        <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon/favicon-16x16.png">
+        <link rel="manifest" href="assets/favicon/site.webmanifest">
+        <link rel="mask-icon" href="assets/favicon/safari-pinned-tab.svg" color="#5bbad5">
+        <meta name="msapplication-TileColor" content="#da532c">
+        <meta name="theme-color" content="#ffffff">
+
+        <link href="https://fonts.googleapis.com/css?family=Rubik:300,400,400i,500" rel="stylesheet">
+        <link href="assets/css/socicon.css" rel="stylesheet" type="text/css" media="all" />
+        <link href="assets/css/entypo.css" rel="stylesheet" type="text/css" media="all" />
+        <link href="assets/css/theme.css" rel="stylesheet" type="text/css" media="all" />
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/gruvbox-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+
+<style type="text/css">
+.terminal {
+  position: relative;
+  color: #fff;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.terminal:before, .terminal:after {
+  content: "";
+  display: block;
+  width: 100%;
+}
+
+.terminal:before {
+  color: #7c8696;
+  width: 100%;
+  height: 1.875em;
+  background-color: #DAD9D9;
+}
+
+.terminal:after {
+  position: absolute;
+  top: .575em;
+  left: .575em;
+  box-shadow: 1.15em 0 0 0 #f7bf33, 2.3em 0 0 0 #69ca42;
+  width: .715em;
+  height: .715em;
+  background-color: #eb5e56;
+  border-radius: .3575em
+}
+</style>
+    </head>
+
+    <body>
+
+        <div class="nav-container">
+            <div class="bg-dark navbar-dark" data-sticky="top">
+            
+                <div class="container">
+                    <nav class="navbar navbar-expand-lg">
+                        <a class="navbar-brand" href="/">
+                            <img src="assets/kvdb.png" alt="KVdb - Key Value Database" title="KVdb - Key Value Database" height="32" />
+                        </a>
+                        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                            <i class="icon-menu h4"></i>
+                        </button>
+                        <div class="collapse navbar-collapse justify-content-between" id="navbarNav">
+                            <ul class="navbar-nav">
+                                <li class="nav-item">
+                                    <a href="/start" class="nav-link">Get Started</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a href="/docs/" class="nav-link">Documentation</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a href="/docs/api/" class="nav-link">API</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a href="/pricing" class="nav-link">Pricing</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a href="https://blog.kvdb.io" class="nav-link">Blog</a>
+                                </li>
+                            </ul>
+                            <ul class="navbar-nav mr-1">
+                            
+                                <li class="nav-item">
+                                    <a href="/login" class="nav-link">Login</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a href="/register" class="nav-link">Register</a>
+                                </li>
+                            
+                            </ul>
+
+                        </div>
+                        
+                    </nav>
+                </div>
+                
+            </div>
+        </div>
+        <div class="main-container">
+            <section class="bg-white space-sm">
+                <div class="container-fluid">
+                    <div class="row align-items-center justify-content-around">
+                        <div class="col-12 col-md-6 col-lg-5 text-center text-md-left">
+                            <h1 class="display-3">Key-Value Store API</h1>
+                            <h2 class="lead">Stop wasting time setting up NoSQL databases. Get a key-value database and web API up and running in seconds.</h2>
+                            <h2 class="lead">Perfect for serverless apps, prototyping, metrics, and more. Simplest API on the planet.</h2>
+                            <a href="/start" class="btn btn-success btn-lg" style="margin-bottom:32px">Get Started Now</a>
+                        </div>
+                        
+                        <div class="col-md-6">
+
+  <pre class="terminal"><code class="bash solarized-dark"># create a new bucket with your email
+$ curl -d 'email=user@example.com' https://kvdb.io
+Fd55uogXyxYdnXJvnyN8Xo
+
+# set an integer key
+$ curl -d '100' https://kvdb.io/Fd55uogXyxYdnXJvnyN8Xo/hits
+
+# increment it (atomic)
+$ curl -d '+1' -XPATCH https://kvdb.io/Fd55uogXyxYdnXJvnyN8Xo/hits
+101
+
+# set a string key
+$ curl -d 'oatmeal' https://kvdb.io/Fd55uogXyxYdnXJvnyN8Xo/cookie
+
+# list keys in the bucket by prefix
+$ curl https://kvdb.io/Fd55uogXyxYdnXJvnyN8Xo/?prefix=hi
+hits
+
+# delete the bucket and its keys
+$ curl -XDELETE https://kvdb.io/Fd55uogXyxYdnXJvnyN8Xo
+</code></pre>
+
+                            
+                        </div>
+                        
+                    </div>
+                    
+                </div>
+                
+            </section>
+            
+
+            <section class="space-xxs text-center bg-gradient text-light">
+                <div class="container">
+                    <div class="row align-items-center">
+                        <div class="col">
+                          <img alt="key value database" src="assets/kvdb.png" height="64" /> <span class="h1" style="font-size: 2.5rem; margin-left: 2rem; display: inline; vertical-align: middle;"><strong>K</strong>ey <strong>V</strong>alue <strong>D</strong>ata<strong>b</strong>ase</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section>
+              
+                <div class="container">
+                    <div class="row align-items-center justify-content-around">
+                        <div class="col-12 col-md-6 col-lg-5 text-center text-md-left section-intro">
+                            <span class="title-decorative">Centralized Data Collection</span>
+                            <h3 class="display-4">Simple. Powerful.</h3>
+                            <span class="lead">
+                                Whether you use one bucket or a thousand buckets to store your keys, KVdb makes it easy to read and write key-value data for any business use case.
+                            </span>
+                            <span class="lead">
+                                Secure your database by using access tokens that restrict which keys users can read and write. Great for most apps with user accounts.
+                            </span>
+                            <a href="/docs/api/" class="btn btn-outline-primary btn-lg">View API Docs</a>
+                        </div>
+                        
+                        <div class="col-8 col-md-6 col-lg-4">
+                            <img alt="Store key value pairs in KVdb from multiple sources" src="assets/iot.png" class="img-fluid" />
+                        </div>
+                        
+                    </div>
+                    
+                </div>
+                
+            </section>
+
+            <a name="get-started">
+            <section class="bg-white">
+                <div class="container">
+                    <div class="row justify-content-center text-center section-intro">
+                        <div class="col-12 col-md-9 col-lg-8">
+                            <span class="title-decorative">Super Simple API</span>
+                            <h2 class="display-4">Get Started in 30 Seconds</h2>
+                            <span class="lead">Built for developers. Ready for the enterprise.</span>
+
+                        </div>
+                        
+                    </div>
+                    
+                    <div class="row justify-content-around">
+
+                        <div class="col-12 col-lg-6 mb-4">
+                            <div class="tab-content">
+                                <div class="tab-pane fade show active" id="content-1" role="tabpanel" arialabelledby="content-1-tab">
+                                    <pre class="terminal"><code class="bash solarized-dark"># create a completely private bucket
+# keys can be updated later via the API or web interface
+$ curl -d 'email=user@example.com' \
+       -d 'secret_key=supersecret' \
+       -d 'read_key=readsecret'    \
+       -d 'write_key=writesecret'  \
+   https://kvdb.io/
+Fd55uogXyxYdnXJvnyN8Xo
+
+# create a new bucket with a secret key to prevent
+# others from listing your keys or deleting them
+$ curl -d 'email=user@example.com&amp;secret_key=safety' https://kvdb.io/
+Fd55uogXyxYdnXJvnyN8Xo
+
+# make bucket read-only and require a key for setting values
+$ curl -d 'write_key=knock' -XPATCH https://kvdb.io/Fd55uogXyxYdnXJvnyN8Xo
+
+# delete bucket
+$ curl -u 'safety:' -XDELETE https://kvdb.io/Fd55uogXyxYdnXJvnyN8Xo
+</code></pre>
+                                </div>
+                                <div class="tab-pane fade" id="content-2" role="tabpanel" arialabelledby="content-2-tab">
+                                    
+                                    <pre class="terminal"><code class="bash solarized-dark"># set an integer key
+$ curl -d '100' https://kvdb.io/Fd55uogXyxYdnXJvnyN8Xo/hits
+
+# increment it
+$ curl -d '+1' -XPATCH https://kvdb.io/Fd55uogXyxYdnXJvnyN8Xo/hits
+101
+
+# set a string key
+$ curl -d 'oatmeal' https://kvdb.io/Fd55uogXyxYdnXJvnyN8Xo/cookie
+
+# get a key
+$ curl https://kvdb.io/Fd55uogXyxYdnXJvnyN8Xo/cookie
+oatmeal
+
+# list keys by prefix
+$ curl https://kvdb.io/Fd55uogXyxYdnXJvnyN8Xo/?prefix=coo
+cookie
+
+# delete a key
+$ curl -XDELETE https://kvdb.io/Fd55uogXyxYdnXJvnyN8Xo/cookie
+</code></pre>
+                                </div>
+                                <div class="tab-pane fade" id="content-3" role="tabpanel" arialabelledby="content-3-tab">
+                                    <pre class="terminal"><code class="bash solarized-dark"># permanent non-expiring keys
+$ curl -d 'default_ttl=0' -XPATCH \
+  https://kvdb.io/Fd55uogXyxYdnXJvnyN8Xo
+
+# a simple Lua script to count events
+$ cat count.lua
+kvdb.header["content-type"] = "text/plain"
+local key = os.date("visitors:%Y-%m-%d")
+local err = kvdb.incr(key, 1)
+if err then
+  kvdb.exit(500)
+end
+
+local value = kvdb.get(key)
+kvdb.say(value)
+
+# upload to KVdb
+$ curl --data-binary @count.lua -XPUT \
+  https://kvdb.io/Fd55uogXyxYdnXJvnyN8Xo/scripts/count
+
+# run it
+$ curl https://kvdb.io/Fd55uogXyxYdnXJvnyN8Xo/scripts/count
+1
+$ curl https://kvdb.io/Fd55uogXyxYdnXJvnyN8Xo/scripts/count
+2
+</code></pre>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-lg-5 col-md-8">
+                            <ul class="nav nav-cards" role="tablist">
+                                <li>
+                                    <div class="card active" data-toggle="tab" href="#content-1" role="tab" aria-controls="content-1" aria-selected="true">
+                                        <div class="card-body">
+                                            <h5>Create a Bucket</h5>
+                                            <p>
+                                                Use <code>curl</code> or your favorite HTTP client library. Create a bucket, optionally protected against key enumeration and deletion.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </li>
+                                <li>
+                                    <div class="card" data-toggle="tab" href="#content-2" role="tab" aria-controls="content-2" aria-selected="false">
+                                        <div class="card-body">
+                                            <h5>Set Key Values</h5>
+                                            <p>
+                                              Values can be up to 16 KB in size. Easily increment or decrement number values.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </li>
+                                <li>
+                                    <div class="card" data-toggle="tab" href="#content-3" role="tab" aria-controls="content-3" aria-selected="false">
+                                        <div class="card-body">
+                                          <h5>Advanced Features <span class="badge badge-success">New</span></h5>
+                                            <p>
+                                              Store keys without expiration with our <strong>Pro</strong> plan, write custom bucket scripts, and use access tokens for controlling access to buckets.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
+                        
+                    </div>
+                    
+                </div>
+                
+            </section>
+            
+
+
+
+            <section class="space-xs text-center bg-gradient text-light">
+                <div class="container">
+                    <div class="row">
+                        <div class="col">
+                            <i class="mr-1 icon-cake"></i>
+                            <span class="mr-2">Looking for more? Try our Pro plan.</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section>
+                <div class="container">
+                    <div class="row justify-content-center text-center section-intro">
+                        <div class="col-12 col-md-9 col-lg-8">
+                            <span class="title-decorative">Go Pro</span>
+                            <h2 class="display-4">Only $19 a month</h2>
+                            <span class="lead">Free to start, affordable to scale.</span>
+
+                        </div>
+                        
+                    </div>
+                    
+
+                    
+          <div class="row justify-content-center">
+            <div class="col-12 col-lg-9 row no-gutters card-group">
+              <div class="card pricing card-lg col-lg-9">
+                <div class="card-body">
+                  <h5>14 Day Trial</h5>
+                  <span class="display-4">Free</span>
+                  <span class="text-small">No Credit Card Necessary</span>
+                  <span class="h6">Includes:</span>
+                  <ul class="list-unstyled">
+                    <li>
+                      10 MB of storage
+                    </li>
+                    <li>
+                      10,000 operations
+                    </li>
+                    <li>
+                      3 month key expiration
+                    </li>
+                    <li>
+                      &mdash;
+                    </li>
+                    <li>
+                      &mdash;
+                    </li>
+                    <li>
+                      &mdash;
+                    </li>
+                  </ul>
+                  <a href="/start" class="btn btn-lg btn-outline-primary">Sign Up Now</a>
+                </div>
+              </div>
+              
+
+              <div class="card pricing card-lg bg-dark col-lg-9">
+                <div class="card-body">
+                  <h5>Pro</h5>
+                  <span class="display-4">$19</span>
+                  <span class="text-small">per month</span>
+                  <span class="h6">Includes:</span>
+                  <ul class="list-unstyled">
+                    <li>
+                      1 GB of storage (+ $1/GB)
+                    </li>
+                    <li>
+                      1 million ops (+ $5/mil)
+                    </li>
+                    <li>
+                      Keys never expire
+                    </li>
+                    <li>
+                      Custom bucket scripts
+                    </li>
+                    <li>
+                      &mdash;
+                    </li>
+                    <li>
+                      &mdash;
+                    </li>
+                  </ul>
+                  <a href="/register" class="btn btn-lg btn-success">Sign Up Now</a>
+                </div>
+              </div>
+              
+
+              <div class="card pricing card-lg col-lg-9">
+                <div class="card-body">
+                  <h5>Enterprise</h5>
+                  <span class="display-4">$499</span>
+                  <span class="text-small">per month</span>
+                  <span class="h6">Includes:</span>
+                  <ul class="list-unstyled">
+                    <li>
+                      Unlimited storage
+                    </li>
+                    <li>
+                      Unlimited operations
+                    </li>
+                    <li>
+                      Keys never expire
+                    </li>
+                    <li>
+                      Custom bucket scripts
+                    </li>
+                    <li>
+                      Encryption at rest
+                    </li>
+                    <li>
+                      On-prem via k8s/Docker
+                    </li>
+                  </ul>
+                  <a href="mailto:inquiries@kvdb.io?subject=Enterprise%20plan" class="btn btn-lg btn-outline-primary">Contact Us</a>
+                </div>
+              </div>
+              
+            </div>
+            
+          </div>
+          
+
+
+                </div>
+                
+            </section>
+            
+
+
+            <section class="bg-dark">
+                <div class="container">
+                    <div class="row section-intro">
+                        <div class="col text-center">
+                            <h3 class="h1">Interested in hearing more? We’ll let you know.</h3>
+                        </div>
+                    </div>
+
+                    <form id="email-capture">
+                        <div class="row justify-content-center section-intro" style="margin-bottom: 0">
+                            <div class="col-12 col-sm-6 col-lg-3">
+                                <div class="form-group">
+                                    <label for="email">Email Address</label>
+                                    <input id="email" type="email" class="form-control form-control-lg" placeholder="you@domain.com">
+                                </div>
+                            </div>
+                            <div class="col-12 col-sm-6 col-lg-3">
+                                <div class="form-group">
+                                    <label for="button">&nbsp;</label>
+                                    <button id="button" type="submit" class="btn btn-lg btn-block btn-success">Notify Me</button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                    </form>
+                </div>
+            </section>
+
+
+            
+            <footer class="bg-gray text-light footer-long">
+                <div class="container">
+                    <div class="row">
+                        <div class="col-12 col-md-3">
+                            <img alt="KVdb logo" src="assets/kvdb.png" height="64" class="mb-4" />
+
+                            <p class="text-muted">
+                                kvdb.io
+                                <br/>
+                                &copy; 2018-2026 <a href="https://www.pilvy.com/">Pilvy LLC</a>
+                                <br />All Rights Reserved
+                            </p>
+                        </div>
+                        
+                        <div class="col-12 col-md-9">
+                            <span class="h5">Questions?<br/><a href="mailto:inquiries@kvdb.io?subject=Pro%20plan%20inquiry">inquiries@kvdb.io</a></span>
+
+                            <div class="row no-gutters">
+                                <div class="col-6 col-lg-3">
+                                    <h6>Navigate</h6>
+                                    <ul class="list-unstyled">
+                                        <li>
+                                            <a href="/">Overview</a>
+                                        </li>
+                                        <li>
+                                            <a href="/docs/">Documentation</a>
+                                        </li>
+                                        <li>
+                                            <a href="/docs/api/">API Reference</a>
+                                        </li>
+                                        <li>
+                                            <a href="/pricing">Pricing</a>
+                                        </li>
+                                        <li>
+                                            <a href="https://blog.kvdb.io">Blog</a>
+                                        </li>
+                                        <li>
+                                            <a href="https://status.kvdb.io">Status</a>
+                                        </li>
+                                    </ul>
+                                </div>
+                                
+                                <div class="col-6 col-lg-3">
+                                    <h6>Legal</h6>
+                                    <ul class="list-unstyled">
+                                        <li>
+                                            <a href="/legal/tos">Terms of Service</a>
+                                        </li>
+                                        <li>
+                                            <a href="/legal/privacy">Privacy Policy</a>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                    
+                </div>
+                
+            </footer>
+        </div>
+
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+        <script type="text/javascript" src="assets/js/popper.min.js"></script>
+        <script type="text/javascript" src="assets/js/jquery.smartWizard.min.js"></script>
+        <script type="text/javascript" src="assets/js/flickity.pkgd.min.js"></script>
+        <script type="text/javascript" src="assets/js/scrollMonitor.js"></script>
+        <script type="text/javascript" src="assets/js/smooth-scroll.polyfills.js"></script>
+        <script type="text/javascript" src="assets/js/prism.js"></script>
+        <script type="text/javascript" src="assets/js/zoom.min.js"></script>
+        <script type="text/javascript" src="assets/js/bootstrap.js"></script>
+        <script type="text/javascript" src="assets/js/theme.js"></script>
+
+        <script defer data-domain="kvdb.io" src="https://plausible.io/js/plausible.js"></script>
+
+        <script type="text/javascript" src="assets/js/kvdb.js"></script>
+        <script src="https://js.stripe.com/v3/"></script>
+    </body>
+</html>
+
+7. Verifying writeability on activated bucket...
+Test PUT response: 200
+SUCCESS_VERIFIED_BUCKET_ID=L4f3GGBK1bgW7nVjFNaZAq

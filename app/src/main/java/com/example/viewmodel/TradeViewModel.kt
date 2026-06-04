@@ -33,6 +33,7 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
     val allPortfolios: StateFlow<List<com.example.data.PortfolioAccount>>
     val allMistakes: StateFlow<List<Mistake>>
     var activePortfolio by mutableStateOf<com.example.data.PortfolioAccount?>(null)
+    var isSyncing by mutableStateOf(false)
     
     // Active User State
     var currentUser by mutableStateOf<User?>(null)
@@ -606,6 +607,7 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
     // Cloud Database Synchronization Engine
     fun syncDataToCloud(pullAndMerge: Boolean = true, onResult: ((Boolean) -> Unit)? = null) {
         val user = currentUser ?: return
+        isSyncing = true
         viewModelScope.launch {
             try {
                 val localDeletedTradeKeys = getDeletedTradeKeys(user.email).toMutableSet()
@@ -879,6 +881,8 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 Log.e("TradeViewModel", "Failed to sync with cloud: ${e.message}", e)
                 onResult?.invoke(false)
+            } finally {
+                isSyncing = false
             }
         }
     }

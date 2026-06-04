@@ -5,6 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -306,6 +308,31 @@ fun MainPortal(viewModel: TradeViewModel) {
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
+                            if (viewModel.isSyncing) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFFE0F2F1))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(12.dp),
+                                            strokeWidth = 1.5.dp,
+                                            color = Color(0xFF00796B)
+                                        )
+                                        Text(
+                                            text = "Syncing...",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF00796B)
+                                        )
+                                    }
+                                }
+                            }
                             IconButton(onClick = { viewModel.currentMainTab = "SETTINGS" }) {
                                 Icon(Icons.Default.Settings, contentDescription = "Settings", tint = TextPrimary)
                             }
@@ -400,6 +427,7 @@ fun MainPortal(viewModel: TradeViewModel) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardWidgets(
     activeEquity: Double,
@@ -617,7 +645,11 @@ fun DashboardWidgets(
     }
     val topHighlightsToShow = if (orderedHighlights.isNotEmpty()) orderedHighlights.take(3) else allOptions.take(3)
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    PullToRefreshBox(
+        isRefreshing = viewModel.isSyncing,
+        onRefresh = { viewModel.syncDataToCloud(pullAndMerge = true) },
+        modifier = Modifier.fillMaxSize()
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()

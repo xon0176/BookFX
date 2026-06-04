@@ -635,7 +635,7 @@ fun JournalScreen(viewModel: TradeViewModel) {
     val trades by viewModel.allTrades.collectAsState()
     val mistakes by viewModel.allMistakes.collectAsState()
     val activePortfolio = viewModel.activePortfolio
-    var selectedDate by remember { mutableStateOf(Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1) }) }
+    var selectedDate by remember { mutableStateOf(Calendar.getInstance()) }
     val today = remember { Calendar.getInstance() }
     val weekdayAndDateStr = remember(selectedDate) {
         val sdf = SimpleDateFormat("EEEE, MMMM d", Locale.getDefault())

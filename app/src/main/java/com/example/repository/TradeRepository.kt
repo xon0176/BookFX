@@ -36,12 +36,13 @@ class TradeRepository(private val tradeDao: TradeDao) {
         primaryInstrument: String = "",
         currency: String = "USD"
     ): User {
-        val existing = tradeDao.getUserByEmail(email)
+        val cleanEmail = email.lowercase().trim()
+        val existing = tradeDao.getUserByEmail(cleanEmail)
         if (existing != null) {
             return existing
         }
         val user = User(
-            email = email,
+            email = cleanEmail,
             passwordHash = passwordHash,
             name = name,
             totalEquity = startingEquity,
@@ -55,7 +56,8 @@ class TradeRepository(private val tradeDao: TradeDao) {
     }
 
     suspend fun validateLogin(email: String, passwordHash: String): User? {
-        val user = tradeDao.getUserByEmail(email)
+        val cleanEmail = email.lowercase().trim()
+        val user = tradeDao.getUserByEmail(cleanEmail)
         if (user != null && user.passwordHash == passwordHash) {
             return user
         }

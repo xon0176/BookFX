@@ -296,7 +296,7 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
             isCheckingEmailOnboarding = true
             authError = null
             try {
-                val email = emailInput.trim()
+                val email = emailInput.lowercase().trim()
                 val hasCloud = com.example.data.CloudSyncManager.hasCloudAccount(getApplication(), email)
                 if (hasCloud) {
                     authError = "This email is already registered. Please log in to restore your performance tracker."
@@ -507,7 +507,7 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Cloud Database Synchronization Engine
-    fun syncDataToCloud() {
+    fun syncDataToCloud(onResult: ((Boolean) -> Unit)? = null) {
         val user = currentUser ?: return
         viewModelScope.launch {
             try {
@@ -515,10 +515,16 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
                 val portfolios = repository.getAllPortfolios()
                 val trades = repository.getAllTrades()
                 val mistakes = repository.getAllMistakes()
-                com.example.data.CloudSyncManager.saveToCloud(getApplication(), user, portfolios, trades, mistakes)
-                Log.d("TradeViewModel", "Cloud Sync Completed successfully.")
+                val success = com.example.data.CloudSyncManager.saveToCloud(getApplication(), user, portfolios, trades, mistakes)
+                if (success) {
+                    Log.d("TradeViewModel", "Cloud Sync Completed successfully.")
+                } else {
+                    Log.e("TradeViewModel", "Cloud Sync failed to upload to remote host.")
+                }
+                onResult?.invoke(success)
             } catch (e: Exception) {
                 Log.e("TradeViewModel", "Failed to sync to cloud: ${e.message}", e)
+                onResult?.invoke(false)
             }
         }
     }
@@ -537,7 +543,7 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 
                 val user = repository.registerUser(
-                    email = emailInput.trim(),
+                    email = emailInput.lowercase().trim(),
                     passwordHash = passwordInput, // Plain for local mock DB validation
                     name = finalName.trim(),
                     startingEquity = startingEquity,
@@ -562,7 +568,7 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun handleLogin() {
         authError = null
-        val email = loginEmailInput.trim()
+        val email = loginEmailInput.lowercase().trim()
         val password = loginPasswordInput
         
         if (email.isBlank()) {

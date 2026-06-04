@@ -568,8 +568,14 @@ fun SettingsMainContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
-                            viewModel.syncDataToCloud()
-                            Toast.makeText(context, "Cloud sync complete! Portfolios and logs updated safely.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Synchronizing with cloud backup server...", Toast.LENGTH_SHORT).show()
+                            viewModel.syncDataToCloud { success ->
+                                if (success) {
+                                    Toast.makeText(context, "Cloud sync complete! Portfolios and logs updated safely.", Toast.LENGTH_LONG).show()
+                                } else {
+                                    Toast.makeText(context, "Cloud sync failed. Please check your internet connection.", Toast.LENGTH_LONG).show()
+                                }
+                            }
                         }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically

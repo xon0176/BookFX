@@ -50,7 +50,7 @@ object CloudSyncManager {
         portfolios: List<PortfolioAccount>,
         trades: List<Trade>,
         mistakes: List<Mistake>
-    ) = withContext(Dispatchers.IO) {
+    ): Boolean = withContext(Dispatchers.IO) {
         val emailKey = hashEmail(user.email)
         val backupData = CloudBackupData(user, portfolios, trades, mistakes)
         val json = adapter.toJson(backupData)
@@ -65,6 +65,7 @@ object CloudSyncManager {
             Log.e("CloudSyncManager", "Failed to save offline copy", e)
         }
 
+        var isSuccess = false
         // 2. Perform background write to global KVdb cloud storage
         try {
             val url = URL("$BASE_URL$emailKey")
@@ -82,12 +83,14 @@ object CloudSyncManager {
             val responseCode = conn.responseCode
             if (responseCode in 200..299) {
                 Log.d("CloudSyncManager", "Successfully backed up data to KVdb cloud ledger for: ${user.email}")
+                isSuccess = true
             } else {
                 Log.e("CloudSyncManager", "Network returned non-success response code: $responseCode when uploading sync ledger")
             }
         } catch (e: Exception) {
             Log.e("CloudSyncManager", "Error backing up to KVdb cloud over network", e)
         }
+        return@withContext isSuccess
     }
 
     /**

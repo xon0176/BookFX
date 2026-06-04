@@ -39,8 +39,9 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     // Simple view-based navigation state
-    // "ONBOARDING", "LOGIN", "MAIN"
-    var currentScreen by mutableStateOf("ONBOARDING")
+    // "SPLASH", "ONBOARDING", "LOGIN", "MAIN"
+    var currentScreen by mutableStateOf("SPLASH")
+    var isCheckingEmailOnboarding by mutableStateOf(false)
 
     // Sub-modules on the MAIN screen
     // "DASHBOARD", "MANAGE", "JOURNAL", "ANALYTICS", "CALC", "COMMUNITY"
@@ -49,8 +50,23 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
     var showCertificateDialog by mutableStateOf(false)
 
     // Settings States
-    var isDarkMode by mutableStateOf(false)
-    var enableWeekendTrading by mutableStateOf(true)
+    private val appSettingsPrefs = application.getSharedPreferences("bookfx_prefs", android.content.Context.MODE_PRIVATE)
+
+    private val _isDarkMode = mutableStateOf(appSettingsPrefs.getBoolean("is_dark_mode", false))
+    var isDarkMode: Boolean
+        get() = _isDarkMode.value
+        set(value) {
+            _isDarkMode.value = value
+            appSettingsPrefs.edit().putBoolean("is_dark_mode", value).apply()
+        }
+
+    private val _enableWeekendTrading = mutableStateOf(appSettingsPrefs.getBoolean("enable_weekend_trading", true))
+    var enableWeekendTrading: Boolean
+        get() = _enableWeekendTrading.value
+        set(value) {
+            _enableWeekendTrading.value = value
+            appSettingsPrefs.edit().putBoolean("enable_weekend_trading", value).apply()
+        }
 
     fun handleUpdateCurrency(newCurrency: String) {
         val user = currentUser ?: return
@@ -273,6 +289,30 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
         return true
     }
 
+    fun checkEmailAndProceedOnboarding(onSuccess: () -> Unit) {
+        if (!validateStep1()) return
+        
+        viewModelScope.launch {
+            isCheckingEmailOnboarding = true
+            authError = null
+            try {
+                val email = emailInput.trim()
+                val hasCloud = com.example.data.CloudSyncManager.hasCloudAccount(getApplication(), email)
+                if (hasCloud) {
+                    authError = "This email is already registered. Please log in to restore your performance tracker."
+                    loginEmailInput = email
+                } else {
+                    onSuccess()
+                }
+            } catch (e: Exception) {
+                // Network check fallback
+                onSuccess()
+            } finally {
+                isCheckingEmailOnboarding = false
+            }
+        }
+    }
+
     fun validateStep2(): Boolean {
         authError = null
         if (nameInput.isBlank()) {
@@ -446,17 +486,22 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             checkAndPreloadDefaultMistakes()
             
+            // Introduce a short, satisfying delay to render the brand's vector identity before landing
+            kotlinx.coroutines.delay(1800)
+            
             val user = repository.getAnyUser()
             if (user != null) {
                 currentUser = user
-                currentScreen = "MAIN"
-                currentMainTab = "DASHBOARD"
                 val portfolios = repository.getAllPortfolios()
                 if (portfolios.isNotEmpty()) {
                     activePortfolio = portfolios.first()
                 } else {
                     checkAndCreateDefaultPortfolio()
                 }
+                currentScreen = "MAIN"
+                currentMainTab = "DASHBOARD"
+            } else {
+                currentScreen = "ONBOARDING"
             }
         }
     }
@@ -858,7 +903,7 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
         val newId = (communityPosts.value.maxOfOrNull { it.id } ?: 0) + 1
         val post = CommunityPost(
             id = newId,
-            author = currentUser?.name ?: "Kartik",
+            author = currentUser?.name ?: "Trader",
             title = newPostTitle.trim(),
             description = newPostContent.trim(),
             timestamp = "Just now",

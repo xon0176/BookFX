@@ -42,9 +42,9 @@ fun SettingsScreen(viewModel: TradeViewModel, modifier: Modifier = Modifier) {
 fun MyProfileScreen(viewModel: TradeViewModel, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val user = viewModel.currentUser
-    val userEmail = user?.email ?: "ctkartik47@gmail.com"
+    val userEmail = user?.email ?: "guest@example.com"
 
-    var profileName by remember { mutableStateOf(user?.name ?: "Kartik") }
+    var profileName by remember { mutableStateOf(user?.name ?: "Trader") }
     var profileCountry by remember { mutableStateOf(user?.country ?: "India") }
     var profileInstrument by remember { mutableStateOf(user?.primaryInstrument ?: "Equity") }
 
@@ -161,7 +161,7 @@ fun MyProfileScreen(viewModel: TradeViewModel, modifier: Modifier = Modifier) {
             OutlinedTextField(
                 value = profileName,
                 onValueChange = { profileName = it },
-                placeholder = { Text("E.g. Kartik C T", color = TextSecondary, fontSize = 15.sp) },
+                placeholder = { Text("E.g. Alex Trader", color = TextSecondary, fontSize = 15.sp) },
                 modifier = Modifier.fillMaxWidth(),
                 leadingIcon = {
                     Icon(
@@ -356,8 +356,8 @@ fun SettingsMainContent(
 ) {
     val context = LocalContext.current
     val user = viewModel.currentUser
-    val userEmail = user?.email ?: "ctkartik47@gmail.com"
-    val userFirstLetter = userEmail.getOrNull(0)?.uppercaseChar()?.toString() ?: "K"
+    val userEmail = user?.email ?: "guest@example.com"
+    val userFirstLetter = userEmail.getOrNull(0)?.uppercaseChar()?.toString() ?: "G"
 
     var showAboutDialog by remember { mutableStateOf(false) }
     var showConfirmDeleteDialog by remember { mutableStateOf(false) }

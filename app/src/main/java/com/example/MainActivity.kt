@@ -63,6 +63,15 @@ data class HighlightItem(
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        val prefs = getSharedPreferences("bookfx_prefs", android.content.Context.MODE_PRIVATE)
+        val isDarkMode = prefs.getBoolean("is_dark_mode", false)
+        if (isDarkMode) {
+            setTheme(android.R.style.Theme_DeviceDefault_NoActionBar)
+            window.decorView.setBackgroundColor(android.graphics.Color.parseColor("#111827"))
+        } else {
+            setTheme(android.R.style.Theme_DeviceDefault_Light_NoActionBar)
+            window.decorView.setBackgroundColor(android.graphics.Color.parseColor("#FFFFFF"))
+        }
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
@@ -82,6 +91,7 @@ class MainActivity : ComponentActivity() {
                         label = "ScreenSwitch"
                     ) { targetScreen ->
                         when (targetScreen) {
+                            "SPLASH" -> SplashScreen(isDarkMode = viewModel.isDarkMode)
                             "ONBOARDING" -> OnboardingScreen(viewModel = viewModel)
                             "LOGIN" -> LoginScreen(viewModel = viewModel)
                             "MAIN" -> MainPortal(viewModel = viewModel)
@@ -95,13 +105,120 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
+fun ThreeDotLoading(
+    modifier: Modifier = Modifier,
+    color: Color = Color(0xFF111827)
+) {
+    val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition(label = "ThreeDotLoading")
+    
+    val d1 by infiniteTransition.animateFloat(
+        initialValue = 0.2f,
+        targetValue = 1f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = androidx.compose.animation.core.keyframes {
+                durationMillis = 600
+                0.2f at 0 with androidx.compose.animation.core.LinearEasing
+                1.0f at 200 with androidx.compose.animation.core.LinearEasing
+                0.2f at 400 with androidx.compose.animation.core.LinearEasing
+                0.2f at 600 with androidx.compose.animation.core.LinearEasing
+            },
+            repeatMode = androidx.compose.animation.core.RepeatMode.Restart
+        ),
+        label = "Dot1"
+    )
+
+    val d2 by infiniteTransition.animateFloat(
+        initialValue = 0.2f,
+        targetValue = 1f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = androidx.compose.animation.core.keyframes {
+                durationMillis = 600
+                0.2f at 0 with androidx.compose.animation.core.LinearEasing
+                1.0f at 200 with androidx.compose.animation.core.LinearEasing
+                0.2f at 400 with androidx.compose.animation.core.LinearEasing
+                0.2f at 600 with androidx.compose.animation.core.LinearEasing
+            },
+            repeatMode = androidx.compose.animation.core.RepeatMode.Restart,
+            initialStartOffset = androidx.compose.animation.core.StartOffset(150)
+        ),
+        label = "Dot2"
+    )
+
+    val d3 by infiniteTransition.animateFloat(
+        initialValue = 0.2f,
+        targetValue = 1f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = androidx.compose.animation.core.keyframes {
+                durationMillis = 600
+                0.2f at 0 with androidx.compose.animation.core.LinearEasing
+                1.0f at 200 with androidx.compose.animation.core.LinearEasing
+                0.2f at 400 with androidx.compose.animation.core.LinearEasing
+                0.2f at 600 with androidx.compose.animation.core.LinearEasing
+            },
+            repeatMode = androidx.compose.animation.core.RepeatMode.Restart,
+            initialStartOffset = androidx.compose.animation.core.StartOffset(300)
+        ),
+        label = "Dot3"
+    )
+
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val dotSize = 10.dp
+        Box(
+            modifier = Modifier
+                .size(dotSize)
+                .background(color.copy(alpha = d1), CircleShape)
+        )
+        Box(
+            modifier = Modifier
+                .size(dotSize)
+                .background(color.copy(alpha = d2), CircleShape)
+        )
+        Box(
+            modifier = Modifier
+                .size(dotSize)
+                .background(color.copy(alpha = d3), CircleShape)
+        )
+    }
+}
+
+@Composable
+fun SplashScreen(isDarkMode: Boolean) {
+    val bgColor = if (isDarkMode) Color(0xFF111827) else Color(0xFFFFFFFF)
+    val tintColor = if (isDarkMode) Color(0xFFFFFFFF) else Color(0xFF111827)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(bgColor),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            androidx.compose.foundation.Image(
+                painter = androidx.compose.ui.res.painterResource(id = com.example.R.drawable.ic_bookfx_logo),
+                contentDescription = "BookFx Logo",
+                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(tintColor),
+                modifier = Modifier.size(96.dp)
+            )
+            Spacer(modifier = Modifier.height(32.dp))
+            ThreeDotLoading(color = tintColor)
+        }
+    }
+}
+
+@Composable
 fun MainPortal(viewModel: TradeViewModel) {
     val trades by viewModel.allTrades.collectAsState()
     val mistakes by viewModel.allMistakes.collectAsState()
     val user = viewModel.currentUser
     val activePortfolio = viewModel.activePortfolio
     
-    val userName = user?.name ?: "Kartik"
+    val userName = user?.name ?: "Trader"
     val baseEquity = activePortfolio?.startingEquity ?: user?.totalEquity ?: 100.0
     
     // Perform live statistics computations, filtering by active portfolio

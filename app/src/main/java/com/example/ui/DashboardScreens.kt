@@ -1437,7 +1437,7 @@ fun JournalScreen(viewModel: TradeViewModel) {
                 val total = activeCertificateTrades.size
                 val winRateVal = if (total > 0) (wins.toDouble() / total) * 100.0 else 0.0
                 val roiVal = if (baseCapitalByTab > 0) (netPlVal / baseCapitalByTab) * 100.0 else 0.0
-                val userName = viewModel.currentUser?.name ?: "Kartik"
+                val userName = viewModel.currentUser?.name ?: "Trader"
                 
                 val certPeriodTitle = when (selectedTab) {
                     "Calendar" -> "MONTH OF ${monthName} ${selectedDate.get(Calendar.YEAR)}"
@@ -2910,7 +2910,7 @@ fun AnalyticsScreen(viewModel: TradeViewModel) {
     }
 
     if (viewModel.showCertificateDialog) {
-        val userName = viewModel.currentUser?.name ?: "Kartik"
+        val userName = viewModel.currentUser?.name ?: "Trader"
         TradingCertificateDialog(
             userName = userName,
             periodTitle = "LIFETIME PERFORMANCE",

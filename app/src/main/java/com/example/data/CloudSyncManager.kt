@@ -4,6 +4,11 @@ import android.content.Context
 import android.util.Log
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.net.HttpURLConnection
+import java.net.URL
+import java.security.MessageDigest
 
 data class CloudBackupData(
     val user: User,
@@ -13,6 +18,10 @@ data class CloudBackupData(
 )
 
 object CloudSyncManager {
+    private const val BUCKET_ID = "J78WBJDLZYLE37UtFDvyLm"
+    private const val BASE_URL = "https://kvdb.io/$BUCKET_ID/"
+    
+    // Fallback SharedPreferences database in case the device is offline or kvdb is unreachable
     private const val PREFS_NAME = "bookfx_cloud_sync_ledger"
     
     private val moshi = Moshi.Builder()
@@ -21,51 +30,138 @@ object CloudSyncManager {
         
     private val adapter = moshi.adapter(CloudBackupData::class.java)
 
+    private fun hashEmail(email: String): String {
+        return try {
+            val digest = MessageDigest.getInstance("SHA-256")
+            val hashBytes = digest.digest(email.lowercase().trim().toByteArray())
+            hashBytes.joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) {
+            // Safe fallback if SHA-256 is somehow unavailable
+            email.lowercase().trim().replace(Regex("[^a-zA-Z0-9]"), "_")
+        }
+    }
+
     /**
-     * Saves or updates the user profile and all associated data inside our "Simulated Cloud Server".
+     * Saves or updates the user profile and all associated data inside our "KVdb Cloud Server".
      */
-    fun saveToCloud(
+    suspend fun saveToCloud(
         context: Context,
         user: User,
         portfolios: List<PortfolioAccount>,
         trades: List<Trade>,
         mistakes: List<Mistake>
-    ) {
+    ) = withContext(Dispatchers.IO) {
+        val emailKey = hashEmail(user.email)
+        val backupData = CloudBackupData(user, portfolios, trades, mistakes)
+        val json = adapter.toJson(backupData)
+        
+        // 1. First, save to local fallback preferences so there's always an offline copy
         try {
-            val key = "user_cloud_${user.email.lowercase().trim()}"
-            val backupData = CloudBackupData(user, portfolios, trades, mistakes)
-            val json = adapter.toJson(backupData)
-            
+            val localPrefsKey = "user_cloud_${user.email.lowercase().trim()}"
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().putString(key, json).apply()
-            Log.d("CloudSyncManager", "Successfully backed up data to cloud ledger for: ${user.email}")
+            prefs.edit().putString(localPrefsKey, json).apply()
+            Log.d("CloudSyncManager", "Successfully backed up locally for offline use: ${user.email}")
         } catch (e: Exception) {
-            Log.e("CloudSyncManager", "Error backing up to cloud", e)
+            Log.e("CloudSyncManager", "Failed to save offline copy", e)
+        }
+
+        // 2. Perform background write to global KVdb cloud storage
+        try {
+            val url = URL("$BASE_URL$emailKey")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "PUT"
+            conn.doOutput = true
+            conn.connectTimeout = 8000
+            conn.readTimeout = 8000
+            conn.setRequestProperty("Content-Type", "application/json")
+            
+            val out = conn.outputStream
+            out.write(json.toByteArray(Charsets.UTF_8))
+            out.close()
+            
+            val responseCode = conn.responseCode
+            if (responseCode in 200..299) {
+                Log.d("CloudSyncManager", "Successfully backed up data to KVdb cloud ledger for: ${user.email}")
+            } else {
+                Log.e("CloudSyncManager", "Network returned non-success response code: $responseCode when uploading sync ledger")
+            }
+        } catch (e: Exception) {
+            Log.e("CloudSyncManager", "Error backing up to KVdb cloud over network", e)
         }
     }
 
     /**
      * Retrieves the cloud-stored backup data for the specified email address if it exists.
      */
-    fun findInCloud(context: Context, email: String): CloudBackupData? {
-        val key = "user_cloud_${email.lowercase().trim()}"
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val json = prefs.getString(key, null) ?: return null
+    suspend fun findInCloud(context: Context, email: String): CloudBackupData? = withContext(Dispatchers.IO) {
+        val emailKey = hashEmail(email)
         
-        return try {
-            adapter.fromJson(json)
+        // 1. Attempt to fetch from network KVdb cloud storage
+        try {
+            val url = URL("$BASE_URL$emailKey")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.connectTimeout = 8000
+            conn.readTimeout = 8000
+            
+            val responseCode = conn.responseCode
+            if (responseCode == 200) {
+                val json = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val data = adapter.fromJson(json)
+                if (data != null) {
+                    Log.d("CloudSyncManager", "Successfully restored data from global KVdb cloud for: $email")
+                    // Also cache locally to keep everything in sync
+                    try {
+                        val localPrefsKey = "user_cloud_${email.lowercase().trim()}"
+                        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                        prefs.edit().putString(localPrefsKey, json).apply()
+                    } catch (e: Exception) {
+                        Log.e("CloudSyncManager", "Failed to cache fetched copy locally", e)
+                    }
+                    return@withContext data
+                }
+            } else {
+                Log.d("CloudSyncManager", "No KVdb data found over network (code: $responseCode) for: $email")
+            }
         } catch (e: Exception) {
-            Log.e("CloudSyncManager", "Error restoring from cloud for: $email", e)
-            null
+            Log.e("CloudSyncManager", "Failed to restore from KVdb cloud over network, will fall back to local database", e)
         }
+
+        // 2. Fall back to local backup file/preference cache if network was down or unreachable
+        try {
+            val localPrefsKey = "user_cloud_${email.lowercase().trim()}"
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val json = prefs.getString(localPrefsKey, null)
+            if (json != null) {
+                Log.d("CloudSyncManager", "Found offline cached backup copy for: $email")
+                return@withContext adapter.fromJson(json)
+            }
+        } catch (e: Exception) {
+            Log.e("CloudSyncManager", "Error reading local cache fallback for: $email", e)
+        }
+        
+        return@withContext null
     }
 
     /**
-     * Checks if an account with this email exists in our "Simulated Cloud Server".
+     * Checks if an account with this email exists in our cloud server or locally.
      */
-    fun hasCloudAccount(context: Context, email: String): Boolean {
-        val key = "user_cloud_${email.lowercase().trim()}"
+    suspend fun hasCloudAccount(context: Context, email: String): Boolean = withContext(Dispatchers.IO) {
+        val emailKey = hashEmail(email)
+        try {
+            val url = URL("$BASE_URL$emailKey")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.connectTimeout = 5000
+            conn.readTimeout = 5000
+            val responseCode = conn.responseCode
+            if (responseCode == 200) return@withContext true
+        } catch (e: Exception) {
+            Log.e("CloudSyncManager", "Error checking account existence over network", e)
+        }
+        
+        val localPrefsKey = "user_cloud_${email.lowercase().trim()}"
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.contains(key)
+        return@withContext prefs.contains(localPrefsKey)
     }
 }

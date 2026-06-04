@@ -338,13 +338,10 @@ fun OnboardingScreen(viewModel: TradeViewModel, modifier: Modifier = Modifier) {
                                     Icon(
                                         imageVector = Icons.Default.ArrowDropDown,
                                         contentDescription = "Dropdown Arrow",
-                                        tint = secondaryText,
-                                        modifier = Modifier.clickable { countryExpanded = true }
+                                        tint = secondaryText
                                     )
                                 },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { countryExpanded = true },
+                                modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedContainerColor = lightFieldBg,
@@ -354,6 +351,13 @@ fun OnboardingScreen(viewModel: TradeViewModel, modifier: Modifier = Modifier) {
                                     focusedTextColor = darkText,
                                     unfocusedTextColor = darkText
                                 )
+                            )
+
+                            // Invisible overlay to make the entire OutlinedTextField area clickable
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .clickable { countryExpanded = true }
                             )
 
                             DropdownMenu(
@@ -393,13 +397,10 @@ fun OnboardingScreen(viewModel: TradeViewModel, modifier: Modifier = Modifier) {
                                     Icon(
                                         imageVector = Icons.Default.ArrowDropDown,
                                         contentDescription = "Dropdown Arrow",
-                                        tint = secondaryText,
-                                        modifier = Modifier.clickable { instrumentExpanded = true }
+                                        tint = secondaryText
                                     )
                                 },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { instrumentExpanded = true },
+                                modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedContainerColor = lightFieldBg,
@@ -409,6 +410,13 @@ fun OnboardingScreen(viewModel: TradeViewModel, modifier: Modifier = Modifier) {
                                     focusedTextColor = darkText,
                                     unfocusedTextColor = darkText
                                 )
+                            )
+
+                            // Invisible overlay to make the entire OutlinedTextField area clickable
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .clickable { instrumentExpanded = true }
                             )
 
                             DropdownMenu(
@@ -480,13 +488,10 @@ fun OnboardingScreen(viewModel: TradeViewModel, modifier: Modifier = Modifier) {
                                         Icon(
                                             imageVector = Icons.Default.ArrowDropDown,
                                             contentDescription = "Dropdown Arrow",
-                                            tint = secondaryText,
-                                            modifier = Modifier.clickable { currencyExpanded = true }
+                                            tint = secondaryText
                                         )
                                     },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { currencyExpanded = true },
+                                    modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp),
                                     colors = OutlinedTextFieldDefaults.colors(
                                         focusedContainerColor = lightFieldBg,
@@ -496,6 +501,13 @@ fun OnboardingScreen(viewModel: TradeViewModel, modifier: Modifier = Modifier) {
                                         focusedTextColor = darkText,
                                         unfocusedTextColor = darkText
                                     )
+                                )
+
+                                // Invisible overlay to make the entire OutlinedTextField area clickable
+                                Box(
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .clickable { currencyExpanded = true }
                                 )
 
                                 DropdownMenu(
@@ -546,9 +558,10 @@ fun OnboardingScreen(viewModel: TradeViewModel, modifier: Modifier = Modifier) {
             val buttonLabel = if (viewModel.onboardingStep < 3) "Continue" else "Complete Setup"
             Button(
                 onClick = {
+                    if (viewModel.isCheckingEmailOnboarding) return@Button
                     when (viewModel.onboardingStep) {
                         1 -> {
-                            if (viewModel.validateStep1()) {
+                            viewModel.checkEmailAndProceedOnboarding {
                                 viewModel.onboardingStep = 2
                             }
                         }
@@ -568,14 +581,26 @@ fun OnboardingScreen(viewModel: TradeViewModel, modifier: Modifier = Modifier) {
                     .fillMaxWidth()
                     .height(56.dp),
                 shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = primaryBlue)
-            ) {
-                Text(
-                    text = buttonLabel,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
+                enabled = !viewModel.isCheckingEmailOnboarding,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = primaryBlue,
+                    disabledContainerColor = primaryBlue.copy(alpha = 0.6f)
                 )
+            ) {
+                if (viewModel.isCheckingEmailOnboarding && viewModel.onboardingStep == 1) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(24.dp)
+                    )
+                } else {
+                    Text(
+                        text = buttonLabel,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
             }
 
             // Slide 1 bottom login navigation helper link

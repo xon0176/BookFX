@@ -14,7 +14,14 @@ data class CloudBackupData(
     val user: User,
     val portfolios: List<PortfolioAccount>,
     val trades: List<Trade>,
-    val mistakes: List<Mistake>
+    val mistakes: List<Mistake>,
+    val deletedTradeKeys: List<String> = emptyList(),
+    val deletedMistakeKeys: List<String> = emptyList(),
+    val deletedPortfolioKeys: List<String> = emptyList(),
+    val lastUpdatedPortfolioKeys: Map<String, Long> = emptyMap(),
+    val lastUpdatedTradeKeys: Map<String, Long> = emptyMap(),
+    val lastUpdatedMistakeKeys: Map<String, Long> = emptyMap(),
+    val lastUpdatedUser: Long = 0L
 )
 
 object CloudSyncManager {
@@ -53,10 +60,29 @@ object CloudSyncManager {
         user: User,
         portfolios: List<PortfolioAccount>,
         trades: List<Trade>,
-        mistakes: List<Mistake>
+        mistakes: List<Mistake>,
+        deletedTradeKeys: List<String> = emptyList(),
+        deletedMistakeKeys: List<String> = emptyList(),
+        deletedPortfolioKeys: List<String> = emptyList(),
+        lastUpdatedPortfolioKeys: Map<String, Long> = emptyMap(),
+        lastUpdatedTradeKeys: Map<String, Long> = emptyMap(),
+        lastUpdatedMistakeKeys: Map<String, Long> = emptyMap(),
+        lastUpdatedUser: Long = 0L
     ): Boolean = withContext(Dispatchers.IO) {
         val emailKey = hashEmail(user.email)
-        val backupData = CloudBackupData(user, portfolios, trades, mistakes)
+        val backupData = CloudBackupData(
+            user = user,
+            portfolios = portfolios,
+            trades = trades,
+            mistakes = mistakes,
+            deletedTradeKeys = deletedTradeKeys,
+            deletedMistakeKeys = deletedMistakeKeys,
+            deletedPortfolioKeys = deletedPortfolioKeys,
+            lastUpdatedPortfolioKeys = lastUpdatedPortfolioKeys,
+            lastUpdatedTradeKeys = lastUpdatedTradeKeys,
+            lastUpdatedMistakeKeys = lastUpdatedMistakeKeys,
+            lastUpdatedUser = lastUpdatedUser
+        )
         val json = adapter.toJson(backupData)
         
         // 1. First, save to local fallback preferences so there's always an offline copy

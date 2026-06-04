@@ -74,6 +74,8 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
             val updated = user.copy(currency = newCurrency)
             repository.updateUser(updated)
             currentUser = updated
+            setUpdatedUserTime(user.email, System.currentTimeMillis())
+            syncDataToCloud()
         }
     }
 
@@ -81,6 +83,8 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             repository.updateUser(updatedUser)
             currentUser = updatedUser
+            setUpdatedUserTime(updatedUser.email, System.currentTimeMillis())
+            syncDataToCloud()
         }
     }
 
@@ -508,33 +512,173 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun getDeletedPortfolioKeys(email: String): Set<String> {
+        val deletePrefs = getApplication<Application>().getSharedPreferences("bookfx_deletions", android.content.Context.MODE_PRIVATE)
+        return deletePrefs.getStringSet("portfolios_${email.lowercase().trim()}", emptySet()) ?: emptySet()
+    }
+
+    private fun addDeletedPortfolioKey(email: String, key: String) {
+        val deletePrefs = getApplication<Application>().getSharedPreferences("bookfx_deletions", android.content.Context.MODE_PRIVATE)
+        val current = deletePrefs.getStringSet("portfolios_${email.lowercase().trim()}", emptySet()) ?: emptySet()
+        val updated = current.toMutableSet().apply { add(key) }
+        deletePrefs.edit().putStringSet("portfolios_${email.lowercase().trim()}", updated).apply()
+    }
+
+    private fun saveDeletedPortfolioKeys(email: String, keys: Set<String>) {
+        val deletePrefs = getApplication<Application>().getSharedPreferences("bookfx_deletions", android.content.Context.MODE_PRIVATE)
+        deletePrefs.edit().putStringSet("portfolios_${email.lowercase().trim()}", keys).apply()
+    }
+
+    private fun getDeletedTradeKeys(email: String): Set<String> {
+        val deletePrefs = getApplication<Application>().getSharedPreferences("bookfx_deletions", android.content.Context.MODE_PRIVATE)
+        return deletePrefs.getStringSet("trades_${email.lowercase().trim()}", emptySet()) ?: emptySet()
+    }
+
+    private fun addDeletedTradeKey(email: String, key: String) {
+        val deletePrefs = getApplication<Application>().getSharedPreferences("bookfx_deletions", android.content.Context.MODE_PRIVATE)
+        val current = deletePrefs.getStringSet("trades_${email.lowercase().trim()}", emptySet()) ?: emptySet()
+        val updated = current.toMutableSet().apply { add(key) }
+        deletePrefs.edit().putStringSet("trades_${email.lowercase().trim()}", updated).apply()
+    }
+
+    private fun saveDeletedTradeKeys(email: String, keys: Set<String>) {
+        val deletePrefs = getApplication<Application>().getSharedPreferences("bookfx_deletions", android.content.Context.MODE_PRIVATE)
+        deletePrefs.edit().putStringSet("trades_${email.lowercase().trim()}", keys).apply()
+    }
+
+    private fun getDeletedMistakeKeys(email: String): Set<String> {
+        val deletePrefs = getApplication<Application>().getSharedPreferences("bookfx_deletions", android.content.Context.MODE_PRIVATE)
+        return deletePrefs.getStringSet("mistakes_${email.lowercase().trim()}", emptySet()) ?: emptySet()
+    }
+
+    private fun addDeletedMistakeKey(email: String, key: String) {
+        val deletePrefs = getApplication<Application>().getSharedPreferences("bookfx_deletions", android.content.Context.MODE_PRIVATE)
+        val current = deletePrefs.getStringSet("mistakes_${email.lowercase().trim()}", emptySet()) ?: emptySet()
+        val updated = current.toMutableSet().apply { add(key) }
+        deletePrefs.edit().putStringSet("mistakes_${email.lowercase().trim()}", updated).apply()
+    }
+
+    private fun saveDeletedMistakeKeys(email: String, keys: Set<String>) {
+        val deletePrefs = getApplication<Application>().getSharedPreferences("bookfx_deletions", android.content.Context.MODE_PRIVATE)
+        deletePrefs.edit().putStringSet("mistakes_${email.lowercase().trim()}", keys).apply()
+    }
+
+    private fun getUpdatedPortfolioTime(email: String, key: String): Long {
+        val prefs = getApplication<Application>().getSharedPreferences("bookfx_last_updated", android.content.Context.MODE_PRIVATE)
+        return prefs.getLong("portfolio_${email.lowercase().trim()}_$key", 0L)
+    }
+
+    private fun setUpdatedPortfolioTime(email: String, key: String, timestamp: Long) {
+        val prefs = getApplication<Application>().getSharedPreferences("bookfx_last_updated", android.content.Context.MODE_PRIVATE)
+        prefs.edit().putLong("portfolio_${email.lowercase().trim()}_$key", timestamp).apply()
+    }
+
+    private fun getUpdatedTradeTime(email: String, key: String): Long {
+        val prefs = getApplication<Application>().getSharedPreferences("bookfx_last_updated", android.content.Context.MODE_PRIVATE)
+        return prefs.getLong("trade_${email.lowercase().trim()}_$key", 0L)
+    }
+
+    private fun setUpdatedTradeTime(email: String, key: String, timestamp: Long) {
+        val prefs = getApplication<Application>().getSharedPreferences("bookfx_last_updated", android.content.Context.MODE_PRIVATE)
+        prefs.edit().putLong("trade_${email.lowercase().trim()}_$key", timestamp).apply()
+    }
+
+    private fun getUpdatedMistakeTime(email: String, key: String): Long {
+        val prefs = getApplication<Application>().getSharedPreferences("bookfx_last_updated", android.content.Context.MODE_PRIVATE)
+        return prefs.getLong("mistake_${email.lowercase().trim()}_$key", 0L)
+    }
+
+    private fun setUpdatedMistakeTime(email: String, key: String, timestamp: Long) {
+        val prefs = getApplication<Application>().getSharedPreferences("bookfx_last_updated", android.content.Context.MODE_PRIVATE)
+        prefs.edit().putLong("mistake_${email.lowercase().trim()}_$key", timestamp).apply()
+    }
+
+    private fun getUpdatedUserTime(email: String): Long {
+        val prefs = getApplication<Application>().getSharedPreferences("bookfx_last_updated", android.content.Context.MODE_PRIVATE)
+        return prefs.getLong("user_${email.lowercase().trim()}", 0L)
+    }
+
+    private fun setUpdatedUserTime(email: String, timestamp: Long) {
+        val prefs = getApplication<Application>().getSharedPreferences("bookfx_last_updated", android.content.Context.MODE_PRIVATE)
+        prefs.edit().putLong("user_${email.lowercase().trim()}", timestamp).apply()
+    }
+
     // Cloud Database Synchronization Engine
-    fun syncDataToCloud(pullAndMerge: Boolean = false, onResult: ((Boolean) -> Unit)? = null) {
+    fun syncDataToCloud(pullAndMerge: Boolean = true, onResult: ((Boolean) -> Unit)? = null) {
         val user = currentUser ?: return
         viewModelScope.launch {
             try {
+                val localDeletedTradeKeys = getDeletedTradeKeys(user.email).toMutableSet()
+                val localDeletedMistakeKeys = getDeletedMistakeKeys(user.email).toMutableSet()
+                val localDeletedPortfolioKeys = getDeletedPortfolioKeys(user.email).toMutableSet()
+
                 if (pullAndMerge) {
                     // 1. Pull the latest backups from the cloud
                     val cloudData = com.example.data.CloudSyncManager.findInCloud(getApplication(), user.email)
                     
                     if (cloudData != null) {
-                        // Let's do a bidirectional merge of Portfolios, Trades, Mistakes and User properties!
+                        // Merge deletion sets from cloud
+                        val cloudDeletedTradeKeys = cloudData.deletedTradeKeys
+                        val cloudDeletedMistakeKeys = cloudData.deletedMistakeKeys
+                        val cloudDeletedPortfolioKeys = cloudData.deletedPortfolioKeys
                         
+                        localDeletedTradeKeys.addAll(cloudDeletedTradeKeys)
+                        localDeletedMistakeKeys.addAll(cloudDeletedMistakeKeys)
+                        localDeletedPortfolioKeys.addAll(cloudDeletedPortfolioKeys)
+                        
+                        // Save the combined deletion lists locally
+                        saveDeletedTradeKeys(user.email, localDeletedTradeKeys)
+                        saveDeletedMistakeKeys(user.email, localDeletedMistakeKeys)
+                        saveDeletedPortfolioKeys(user.email, localDeletedPortfolioKeys)
+
                         // A. Merge Portfolios
                         val localPortfolios = repository.getAllPortfolios()
+                        for (localP in localPortfolios) {
+                            val localKey = localP.name.lowercase().trim()
+                            if (localDeletedPortfolioKeys.contains(localKey)) {
+                                repository.deletePortfolio(localP)
+                            }
+                        }
+                        
+                        val remainingLocalPortfolios = repository.getAllPortfolios()
                         for (cloudPort in cloudData.portfolios) {
-                            val matchingLocal = localPortfolios.find { it.name.lowercase().trim() == cloudPort.name.lowercase().trim() }
+                            val cloudKey = cloudPort.name.lowercase().trim()
+                            if (localDeletedPortfolioKeys.contains(cloudKey)) {
+                                continue
+                            }
+                            
+                            val matchingLocal = remainingLocalPortfolios.find { it.name.lowercase().trim() == cloudKey }
                             if (matchingLocal == null) {
                                 // Portfolio is in cloud but not local, insert it locally
                                 repository.insertPortfolio(cloudPort.copy(id = 0))
+                                val cloudTime = cloudData.lastUpdatedPortfolioKeys[cloudKey] ?: 0L
+                                setUpdatedPortfolioTime(user.email, cloudKey, cloudTime)
                             } else {
-                                // Same portfolio exists. Let's merge startingEquity if different
-                                if (matchingLocal.startingEquity != cloudPort.startingEquity) {
-                                    // Keep the non-100 or non-default values, or let the cloud override local default
-                                    if (matchingLocal.startingEquity == 100.0 && cloudPort.startingEquity != 100.0) {
-                                        repository.updatePortfolio(matchingLocal.copy(startingEquity = cloudPort.startingEquity, broker = cloudPort.broker, type = cloudPort.type, description = cloudPort.description))
-                                    } else if (cloudPort.startingEquity != 100.0 && cloudPort.startingEquity > matchingLocal.startingEquity) {
-                                        repository.updatePortfolio(matchingLocal.copy(startingEquity = cloudPort.startingEquity))
+                                // Same portfolio exists.
+                                val cloudTime = cloudData.lastUpdatedPortfolioKeys[cloudKey] ?: 0L
+                                val localTime = getUpdatedPortfolioTime(user.email, cloudKey)
+                                
+                                if (cloudTime > localTime) {
+                                    // Cloud version is newer! Overwrite local with cloud details
+                                    val mergedPort = matchingLocal.copy(
+                                        startingEquity = cloudPort.startingEquity,
+                                        broker = cloudPort.broker,
+                                        type = cloudPort.type,
+                                        description = cloudPort.description,
+                                        currency = cloudPort.currency
+                                    )
+                                    repository.updatePortfolio(mergedPort)
+                                    setUpdatedPortfolioTime(user.email, cloudKey, cloudTime)
+                                } else if (localTime > cloudTime) {
+                                    // Local version is newer, do nothing
+                                } else {
+                                    if (matchingLocal.startingEquity != cloudPort.startingEquity) {
+                                        // Keep the non-100 or non-default values, or let the cloud override local default
+                                        if (matchingLocal.startingEquity == 100.0 && cloudPort.startingEquity != 100.0) {
+                                            repository.updatePortfolio(matchingLocal.copy(startingEquity = cloudPort.startingEquity, broker = cloudPort.broker, type = cloudPort.type, description = cloudPort.description))
+                                        } else if (cloudPort.startingEquity != 100.0 && cloudPort.startingEquity > matchingLocal.startingEquity) {
+                                            repository.updatePortfolio(matchingLocal.copy(startingEquity = cloudPort.startingEquity))
+                                        }
                                     }
                                 }
                             }
@@ -546,11 +690,23 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
                         
                         // B. Merge Trades
                         val localTrades = repository.getAllTrades()
+                        for (localT in localTrades) {
+                            val localKey = "${localT.symbol}_${localT.timestamp}"
+                            if (localDeletedTradeKeys.contains(localKey)) {
+                                repository.deleteTrade(localT)
+                            }
+                        }
+                        
+                        val remainingLocalTrades = repository.getAllTrades()
                         for (cloudTrade in cloudData.trades) {
-                            val matchingLocalTrade = localTrades.find { 
+                            val cloudKey = "${cloudTrade.symbol}_${cloudTrade.timestamp}"
+                            if (localDeletedTradeKeys.contains(cloudKey)) {
+                                continue
+                            }
+                            
+                            val matchingLocalTrade = remainingLocalTrades.find { 
                                 it.timestamp == cloudTrade.timestamp && 
-                                it.symbol.lowercase().trim() == cloudTrade.symbol.lowercase().trim() && 
-                                Math.abs(it.profit - cloudTrade.profit) < 0.01 
+                                it.symbol.lowercase().trim() == cloudTrade.symbol.lowercase().trim()
                             }
                             if (matchingLocalTrade == null) {
                                 val originalPortName = cloudData.portfolios.find { p -> p.id == cloudTrade.portfolioId }?.name
@@ -560,30 +716,105 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
                                     defaultPortId
                                 }
                                 repository.insertTrade(cloudTrade.copy(id = 0, portfolioId = resolvedPortId))
+                                val cloudTime = cloudData.lastUpdatedTradeKeys[cloudKey] ?: 0L
+                                setUpdatedTradeTime(user.email, cloudKey, cloudTime)
+                            } else {
+                                // Match exists! Check which is newer
+                                val cloudTime = cloudData.lastUpdatedTradeKeys[cloudKey] ?: 0L
+                                val localTime = getUpdatedTradeTime(user.email, cloudKey)
+                                
+                                if (cloudTime > localTime) {
+                                    // Cloud is newer! Update local entry details
+                                    val cloudPortName = cloudData.portfolios.find { p -> p.id == cloudTrade.portfolioId }?.name
+                                    val resolvedPortId = if (cloudPortName != null) {
+                                        updatedLocalPortfolios.find { it.name.lowercase().trim() == cloudPortName.lowercase().trim() }?.id ?: matchingLocalTrade.portfolioId
+                                    } else {
+                                        matchingLocalTrade.portfolioId
+                                    }
+                                    
+                                    val updatedTrade = matchingLocalTrade.copy(
+                                        entryPrice = cloudTrade.entryPrice,
+                                        exitPrice = cloudTrade.exitPrice,
+                                        size = cloudTrade.size,
+                                        profit = cloudTrade.profit,
+                                        brokerage = cloudTrade.brokerage,
+                                        notes = cloudTrade.notes,
+                                        isBuy = cloudTrade.isBuy,
+                                        portfolioId = resolvedPortId
+                                    )
+                                    repository.insertTrade(updatedTrade)
+                                    setUpdatedTradeTime(user.email, cloudKey, cloudTime)
+                                }
                             }
                         }
                         
                         // C. Merge Mistakes
                         val localMistakes = repository.getAllMistakes()
+                        for (localM in localMistakes) {
+                            val localKey = "${localM.timestamp}"
+                            if (localDeletedMistakeKeys.contains(localKey)) {
+                                repository.deleteMistake(localM)
+                            }
+                        }
+                        
+                        val remainingLocalMistakes = repository.getAllMistakes()
                         for (cloudMistake in cloudData.mistakes) {
-                            val matchingLocalMistake = localMistakes.find { 
-                                it.timestamp == cloudMistake.timestamp && 
-                                it.content.lowercase().trim() == cloudMistake.content.lowercase().trim() 
+                            val cloudKey = "${cloudMistake.timestamp}"
+                            if (localDeletedMistakeKeys.contains(cloudKey)) {
+                                continue
+                            }
+                            
+                            val matchingLocalMistake = remainingLocalMistakes.find { 
+                                it.timestamp == cloudMistake.timestamp
                             }
                             if (matchingLocalMistake == null) {
                                 repository.insertMistake(cloudMistake.copy(id = 0))
+                                val cloudTime = cloudData.lastUpdatedMistakeKeys[cloudKey] ?: 0L
+                                setUpdatedMistakeTime(user.email, cloudKey, cloudTime)
+                            } else {
+                                // Match exists! Check which is newer
+                                val cloudTime = cloudData.lastUpdatedMistakeKeys[cloudKey] ?: 0L
+                                val localTime = getUpdatedMistakeTime(user.email, cloudKey)
+                                
+                                if (cloudTime > localTime) {
+                                    // Cloud is newer! Update local mistake
+                                    val updatedMistake = matchingLocalMistake.copy(
+                                        content = cloudMistake.content
+                                    )
+                                    repository.updateMistake(updatedMistake)
+                                    setUpdatedMistakeTime(user.email, cloudKey, cloudTime)
+                                }
                             }
                         }
                         
                         // D. Merge User profile
                         val localUser = repository.getAnyUser()
                         if (localUser != null) {
-                            val differentEquity = localUser.totalEquity != cloudData.user.totalEquity
-                            if (differentEquity) {
-                                val cloudEquity = cloudData.user.totalEquity
-                                val updatedUser = localUser.copy(totalEquity = cloudEquity)
+                            val cloudUserTime = cloudData.lastUpdatedUser
+                            val localUserTime = getUpdatedUserTime(user.email)
+                            
+                            if (cloudUserTime > localUserTime) {
+                                val updatedUser = localUser.copy(
+                                    name = cloudData.user.name,
+                                    traderAlias = cloudData.user.traderAlias,
+                                    country = cloudData.user.country,
+                                    primaryInstrument = cloudData.user.primaryInstrument,
+                                    currency = cloudData.user.currency,
+                                    totalEquity = cloudData.user.totalEquity
+                                )
                                 repository.updateUser(updatedUser)
                                 currentUser = updatedUser
+                                setUpdatedUserTime(user.email, cloudUserTime)
+                            } else if (localUserTime > cloudUserTime) {
+                                // Local is newer, do nothing
+                            } else {
+                                val differentEquity = localUser.totalEquity != cloudData.user.totalEquity
+                                if (differentEquity) {
+                                    val cloudEquity = cloudData.user.totalEquity
+                                    val updatedUser = localUser.copy(totalEquity = cloudEquity)
+                                    repository.updateUser(updatedUser)
+                                    currentUser = updatedUser
+                                }
                             }
                         }
                     }
@@ -604,9 +835,41 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
                 } else if (mergedPortfolios.isNotEmpty()) {
                     activePortfolio = mergedPortfolios.first()
                 }
+
+                // Build modern maps of our local update times to synchronize upstream
+                val userKey = user.email.lowercase().trim()
+                val localLastUpdatedPortfolios = mutableMapOf<String, Long>()
+                mergedPortfolios.forEach { p ->
+                    val k = p.name.lowercase().trim()
+                    localLastUpdatedPortfolios[k] = getUpdatedPortfolioTime(userKey, k)
+                }
+                val localLastUpdatedTrades = mutableMapOf<String, Long>()
+                mergedTrades.forEach { t ->
+                    val k = "${t.symbol}_${t.timestamp}"
+                    localLastUpdatedTrades[k] = getUpdatedTradeTime(userKey, k)
+                }
+                val localLastUpdatedMistakes = mutableMapOf<String, Long>()
+                mergedMistakes.forEach { m ->
+                    val k = "${m.timestamp}"
+                    localLastUpdatedMistakes[k] = getUpdatedMistakeTime(userKey, k)
+                }
+                val localLastUpdatedUser = getUpdatedUserTime(userKey)
                 
                 // 3. Save the complete merged state back to the cloud
-                val success = com.example.data.CloudSyncManager.saveToCloud(getApplication(), mergedUser, mergedPortfolios, mergedTrades, mergedMistakes)
+                val success = com.example.data.CloudSyncManager.saveToCloud(
+                    context = getApplication(),
+                    user = mergedUser,
+                    portfolios = mergedPortfolios,
+                    trades = mergedTrades,
+                    mistakes = mergedMistakes,
+                    deletedTradeKeys = localDeletedTradeKeys.toList(),
+                    deletedMistakeKeys = localDeletedMistakeKeys.toList(),
+                    deletedPortfolioKeys = localDeletedPortfolioKeys.toList(),
+                    lastUpdatedPortfolioKeys = localLastUpdatedPortfolios,
+                    lastUpdatedTradeKeys = localLastUpdatedTrades,
+                    lastUpdatedMistakeKeys = localLastUpdatedMistakes,
+                    lastUpdatedUser = localLastUpdatedUser
+                )
                 if (success) {
                     Log.d("TradeViewModel", "Cloud Sync Completed successfully (pullAndMerge=$pullAndMerge).")
                 } else {
@@ -809,10 +1072,14 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
             
             // Adjust current user's equity according to profit & brokerage deduction
             currentUser?.let { user ->
+                val key = "${trade.symbol}_${trade.timestamp}"
+                setUpdatedTradeTime(user.email, key, System.currentTimeMillis())
+                
                 val updatedEquity = user.totalEquity - oldProfit + oldBrokerage + profitValue - broker
                 val updatedUser = user.copy(totalEquity = updatedEquity)
                 repository.updateUser(updatedUser)
                 currentUser = updatedUser
+                setUpdatedUserTime(user.email, System.currentTimeMillis())
             }
 
             val isEditMode = editingTradeId != null
@@ -826,12 +1093,16 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
     fun handleDeleteTrade(trade: Trade) {
         viewModelScope.launch {
             repository.deleteTrade(trade)
-            // Undo user equity adjustment upon trade removal
             currentUser?.let { user ->
+                val key = "${trade.symbol}_${trade.timestamp}"
+                addDeletedTradeKey(user.email, key)
+                
+                // Undo user equity adjustment upon trade removal
                 val updatedEquity = user.totalEquity - trade.profit + trade.brokerage
                 val updatedUser = user.copy(totalEquity = updatedEquity)
                 repository.updateUser(updatedUser)
                 currentUser = updatedUser
+                setUpdatedUserTime(user.email, System.currentTimeMillis())
             }
             syncDataToCloud()
         }
@@ -844,6 +1115,9 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val m = Mistake(content = content)
             repository.insertMistake(m)
+            currentUser?.let { user ->
+                setUpdatedMistakeTime(user.email, "${m.timestamp}", System.currentTimeMillis())
+            }
             mistakeInput = ""
             syncDataToCloud()
         }
@@ -852,6 +1126,9 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
     fun handleUpdateMistake(mistake: Mistake) {
         viewModelScope.launch {
             repository.updateMistake(mistake)
+            currentUser?.let { user ->
+                setUpdatedMistakeTime(user.email, "${mistake.timestamp}", System.currentTimeMillis())
+            }
             syncDataToCloud()
         }
     }
@@ -859,6 +1136,10 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
     fun handleDeleteMistake(mistake: Mistake) {
         viewModelScope.launch {
             repository.deleteMistake(mistake)
+            currentUser?.let { user ->
+                val key = "${mistake.timestamp}"
+                addDeletedMistakeKey(user.email, key)
+            }
             syncDataToCloud()
         }
     }
@@ -873,7 +1154,11 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
                 val updated = portfolio.copy(startingEquity = newBalance)
                 repository.updatePortfolio(updated)
                 activePortfolio = updated
+                currentUser?.let { user ->
+                    setUpdatedPortfolioTime(user.email, portfolio.name.lowercase().trim(), System.currentTimeMillis())
+                }
                 manageMessage = "Starting capital updated to $${String.format("%.2f", newBalance)}"
+                syncDataToCloud()
             }
         }
     }
@@ -925,6 +1210,9 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
             if (activePortfolio == null) {
                 activePortfolio = insertedAcc
             }
+            currentUser?.let { user ->
+                setUpdatedPortfolioTime(user.email, name.lowercase().trim(), System.currentTimeMillis())
+            }
             
             // Reset input fields
             portfolioNameInput = ""
@@ -965,6 +1253,9 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
             if (activePortfolio?.id == id) {
                 activePortfolio = updated
             }
+            currentUser?.let { user ->
+                setUpdatedPortfolioTime(user.email, name.lowercase().trim(), System.currentTimeMillis())
+            }
             
             // Reset fields
             portfolioNameInput = ""
@@ -982,6 +1273,9 @@ class TradeViewModel(application: Application) : AndroidViewModel(application) {
     fun handleDeletePortfolio(portfolio: com.example.data.PortfolioAccount) {
         viewModelScope.launch {
             repository.deletePortfolio(portfolio)
+            currentUser?.let { user ->
+                addDeletedPortfolioKey(user.email, portfolio.name.lowercase().trim())
+            }
             val remaining = repository.getAllPortfolios()
             if (activePortfolio?.id == portfolio.id) {
                 activePortfolio = remaining.firstOrNull()

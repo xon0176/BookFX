@@ -1,17 +1,155 @@
-# Run and deploy your AI Studio app
+📖 BookFX Application Overview
 
-This contains everything you need to run your app locally.
+The BookFX Trading Journal is a comprehensive, data-driven toolkit designed to help traders maintain discipline, track performance, and analyze market activity. 📊
 
-View your app in AI Studio: https://ai.studio/apps/021f1a61-323a-4293-bae8-b7f1dd6f4007
+It provides a structured environment to log trades, manage multiple asset portfolios (💰 Live, 🚀 Prop Firm, or 🧪 Demo), and visualize progress to systematically improve your trading edge.
 
-## Run Locally
+🎯 Key Functional Pillars
 
-**Prerequisites:**  [Android Studio](https://developer.android.com/studio)
+📈 Performance Tracking
 
+A centralized dashboard to monitor:
 
-1. Open Android Studio
-2. Select **Open** and choose the directory containing this project
-3. Allow Android Studio to fix any incompatibilities as it imports the project.
-4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
-5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
-6. Run the app on an emulator or physical device
+- Monthly performance
+- Yearly performance
+- Profitability metrics
+- ROI (Return on Investment)
+- Trading growth over time
+
+💼 Portfolio Management
+
+Organize multiple trading accounts separately:
+
+- 💰 Live Accounts
+- 🚀 Prop Firm Accounts
+- 🧪 Demo Accounts
+
+Define:
+
+- Starting Capital
+- Account Currency
+- Broker Details
+- Portfolio Type
+
+📝 Journaling & Reflection
+
+An integrated journaling system helps you:
+
+- Record every trade
+- Add detailed notes
+- Review trading decisions
+- Track emotional and strategic patterns
+- Learn from past performance
+
+☁️ Cloud Integrity
+
+Secure real-time synchronization ensures:
+
+- Automatic backups
+- Cross-device consistency
+- Reliable data protection
+- Seamless portfolio tracking
+
+---
+
+🚀 User Guide: Mastering Your Trading Journal
+
+Follow this guide to maximize your trading analysis and performance.
+
+1️⃣ Setting Up Portfolios
+
+Before logging trades, configure your portfolio correctly.
+
+Steps:
+
+- Navigate to Settings ⚙️ or the Portfolio Creation screen.
+- Enter:
+  - Portfolio Name (e.g., "Main Swing Account")
+  - Broker Name
+  - Portfolio Type (💰 Live / 🚀 Prop / 🧪 Demo)
+  - Starting Equity
+
+Portfolio Management
+
+- Create and manage multiple portfolios.
+- Switch between portfolios anytime.
+- Only one portfolio remains Active ✅ at a time to keep your dashboard focused.
+
+---
+
+2️⃣ Logging Trades
+
+Maintain accurate records to ensure reliable analytics.
+
+Add a Trade
+
+Tap ➕ Add Trade to open the trade logging interface.
+
+Enter Trade Details
+
+- 📊 Symbol
+- 🟢 BUY or 🔴 SELL
+- 🎯 Entry Price
+- 🚪 Exit Price
+- 💸 Brokerage Costs
+- 📝 Trade Notes
+
+The journal automatically calculates profitability and performance metrics based on your inputs.
+
+---
+
+3️⃣ Analyzing Performance
+
+Use the Calendar and Analytics sections to review your progress.
+
+📅 Calendar View
+
+- Opens to Today automatically.
+- Select any previous date to view historical trades.
+- Easily navigate your trading history.
+
+📊 Dashboard Metrics
+
+Monitor:
+
+- Monthly Profit/Loss
+- ROI
+- Portfolio Growth
+- Trading Consistency
+
+🔍 Analytics Screen
+
+Dive deeper into:
+
+- Win Rate
+- Loss Rate
+- Trade Statistics
+- Portfolio Performance
+- Historical Trends
+
+---
+
+4️⃣ Cloud Synchronization
+
+Your data syncs automatically whenever changes are made.
+
+🔄 Manual Sync
+
+On the Dashboard:
+
+1. Pull down from the top of the screen.
+2. Release to refresh.
+3. Watch the "Syncing..." indicator appear.
+
+🛡️ Data Safety
+
+- Automatic cloud backups
+- Real-time synchronization
+- Secure storage
+- Always up-to-date trading records
+
+---
+
+🌟 Trade Smarter. Journal Better. Grow Faster.
+
+BookFX helps traders build discipline, improve decision-making, and achieve long-term consistency through structured journaling, performance analytics, and powerful portfolio management. 📈🔥
